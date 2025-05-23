@@ -293,7 +293,8 @@ async def generate_report_flow(company_url_input, selected_language):
             report_data['filings_data'] = filings_data
 
         if not filings_data or not filings_data.get('filings'):
-            st.warning("⚠️ No SEC filings found or error in fetching.")
+            st.info("⚠️ No SEC filings found or error in fetching.")
+            urls=[]
         else:
             st.success(f"✅ Found {len(filings_data.get('filings', []))} SEC filings.")
             with st.expander("View SEC Filings", expanded=False):
@@ -302,19 +303,24 @@ async def generate_report_flow(company_url_input, selected_language):
             urls = [filing['filingUrl'] for filing in filings_data['filings'] if 'filingUrl' in filing]
             if not urls:
                 st.warning("⚠️ No URLs found in SEC filings to generate report from.")
-            else:
-                with st.expander('📊 Research Logs', expanded=True):
-                    logs_container = st.empty()  # Create a placeholder for logs
-                    logs_container.info("Logs will appear here as the research progresses...")
-                reports_container = st.empty()  # Create a placeholder for reports
-                reports_container.info("The final report will be displayed here once generated.")
-                report, images, logs = await sec_get_report(query=query_template, report_type="research_report",
-                                                            sources=urls, logs_container=logs_container,
-                                                            report_container=reports_container)
-                report_data['report'] = report
-                report_data['images'] = images
-                report_data['logs'] = logs
-                st.success("✅ SEC report generated successfully!")
+            # else:
+            #     with st.expander('📊 Research Logs', expanded=True):
+            #         logs_container = st.empty()  # Create a placeholder for logs
+            #         logs_container.info("Logs will appear here as the research progresses...")
+            #     reports_container = st.empty()  # Create a placeholder for reports
+            #     reports_container.info("The final report will be displayed here once generated.")
+        with st.expander('📊 Research Logs', expanded=True):
+            logs_container = st.empty()  # Create a placeholder for logs
+            logs_container.info("Logs will appear here as the research progresses...")
+        reports_container = st.empty()  # Create a placeholder for reports
+        reports_container.info("The final report will be displayed here once generated.")
+        report, images, logs = await sec_get_report(query=query_template, report_type="research_report",
+                                                    sources=urls, logs_container=logs_container,
+                                                    report_container=reports_container)
+        report_data['report'] = report
+        report_data['images'] = images
+        report_data['logs'] = logs
+        st.success("✅ SEC report generated successfully!")
 
     elif selected_language.lower() == "korean":
         st.subheader("🇰🇷 DART Filing Analysis")
