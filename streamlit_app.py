@@ -44,9 +44,9 @@ filings = st.sidebar.selectbox(
 )
 
 if filings == "Global SEC filings":
-    language="english"
+    language = "english"
 else:
-    language="korean"
+    language = "korean"
 
 # Company URL input
 company_url = st.sidebar.text_input(
@@ -153,44 +153,35 @@ def display_report(report_data):
     elif selected_language.lower() == "korean":
         st.subheader("🇰🇷 DART Filing Analysis")
 
-        with st.spinner("📝 Generating company short list for DART..."):
-            # Ensure first_name is available, or use a placeholder/fallback
-            company_first_name_for_dart = first_name if first_name != 'N/A' else full_name.split(" ")[0]
-            corp_short_list_data = report_data.get('corp_short_list_data', {})
+        corp_short_list_data = report_data.get('corp_short_list_data', {})
+        report_source = report_data.get('report_source', 'web')
+        web_search_reason = report_data.get('web_search_reason', '')
 
-        if isinstance(corp_short_list_data,
-                      str) and "Error" in corp_short_list_data:  # Check if short_list returned an error string
-            st.error(f"❌ {corp_short_list_data}")
-            return
-        if not corp_short_list_data or (
-                isinstance(corp_short_list_data, str) and "not in the dart list" in corp_short_list_data):
-            st.warning(
-                f"⚠️ {corp_short_list_data if isinstance(corp_short_list_data, str) else 'Company not found in DART list or error.'}")
-            return  # Stop if company not found or error
+        if isinstance(corp_short_list_data, str) and "not in the dart list" in corp_short_list_data.lower():
+            st.info("ℹ️ Company not in DART list. Report generated using web search.")
+        elif web_search_reason == "not in short dart list":
+            st.info("ℹ️ Company in DART list but not found in short DART list. Report generated using web search.")
+        elif web_search_reason == "error in dart lookup":
+            st.info("ℹ️ Error in DART lookup. Report generated using web search.")
+        elif web_search_reason == "corp code generation failed":
+            st.info("ℹ️ DART corporation code generation failed. Report generated using web search.")
+        elif not corp_short_list_data:
+            st.info("ℹ️ Company not found in DART list. Report generated using web search.")
+        else:
+            st.success("✅ Company found in DART short list.")
+            with st.expander("View Short List", expanded=False):
+                st.write(corp_short_list_data)
 
-        st.success("✅ Short list generated for DART.")
-        with st.expander("View Short List", expanded=False):
-            st.write(corp_short_list_data)
-
-        with st.spinner("🔢 Generating DART corporation code..."):
             corp_code_data = report_data.get('corp_code_data', {})
+            if corp_code_data and "error" not in corp_code_data and corp_code_data.get('corp_code') != 'N/A':
+                st.success("✅ DART Corporation code generated.")
+                with st.expander("View Corporation Code", expanded=False):
+                    st.json(corp_code_data)
 
-        if not corp_code_data or "error" in corp_code_data or corp_code_data.get('corp_code') == 'N/A':
-            st.error(
-                f"❌ Failed to generate DART corporation code: {corp_code_data.get('error', 'Code is N/A or invalid')}")
-            if "raw_content" in corp_code_data: st.expander("Raw LLM Output").write(corp_code_data["raw_content"])
-            return
-
-        st.success("✅ DART Corporation code generated.")
-        with st.expander("View Corporation Code", expanded=False):
-            st.json(corp_code_data)
-
-        corp_code_value = corp_code_data['corp_code']
-
-        with st.spinner("📊 Generating comprehensive DART report..."):
-            report = report_data.get('report', '')
-            images = report_data.get('images', [])
-        st.success("✅ DART report generated successfully!")
+        if report_source == 'web':
+            st.info("ℹ️ Report generated using web search.")
+        else:
+            st.success("✅ Success! Report generated using DART filings!")
 
     if report_data.get('logs'):
         with st.expander("📊 Research Logs"):
@@ -304,7 +295,7 @@ async def generate_report_flow(company_url_input, selected_language):
 
         if not filings_data or not filings_data.get('filings'):
             st.info("⚠️ No SEC filings found or error in fetching.")
-            urls=[]
+            urls = []
         else:
             st.success(f"✅ Found {len(filings_data.get('filings', []))} SEC filings.")
             with st.expander("View SEC Filings", expanded=False):
@@ -341,63 +332,99 @@ async def generate_report_flow(company_url_input, selected_language):
             corp_short_list_data = await short_list(full_name, company_first_name_for_dart)
             report_data['corp_short_list_data'] = corp_short_list_data
 
-        if isinstance(corp_short_list_data,
-                      str) and "Error" in corp_short_list_data:  # Check if short_list returned an error string
-            st.error(f"❌ {corp_short_list_data}")
-            return
-        if not corp_short_list_data or (
-                isinstance(corp_short_list_data, str) and "not in the dart list" in corp_short_list_data):
-            st.warning(
-                f"⚠️ {corp_short_list_data if isinstance(corp_short_list_data, str) else 'Company not found in DART list or error.'}")
-            return  # Stop if company not found or error
+        use_web_search = False
+        web_search_reason = ""
 
-        st.success("✅ Short list generated for DART.")
-        with st.expander("View Short List", expanded=False):
-            st.write(corp_short_list_data)
+        # Check if company is not in corp list at all
+        if isinstance(corp_short_list_data, str) and "not in the dart list" in corp_short_list_data.lower():
+            st.info("ℹ️ Company not in DART list. Using web search instead.")
+            use_web_search = True
+            web_search_reason = "not in dart list"
+        # Check if there's an error in the corp list lookup
+        elif isinstance(corp_short_list_data, str) and "Error" in corp_short_list_data:
+            st.info(f"ℹ️ Error in DART lookup: {corp_short_list_data}. Using web search instead.")
+            use_web_search = True
+            web_search_reason = "error in dart lookup"
+        # Check if company is in corp list but not found in short list
+        elif not corp_short_list_data or (isinstance(corp_short_list_data, dict) and not corp_short_list_data):
+            st.info("ℹ️ Company in DART list but not found in short DART list. Using web search instead.")
+            use_web_search = True
+            web_search_reason = "not in short dart list"
+        # Company found in both corp list and short list - proceed with DART filing download
+        else:
+            st.success("✅ Company found in DART short list.")
+            with st.expander("View Short List", expanded=False):
+                st.write(corp_short_list_data)
 
-        with st.spinner("🔢 Generating DART corporation code..."):
-            corp_code_data = await generate_corp_code(full_name, corp_short_list_data)
-            report_data['corp_code_data'] = corp_code_data
+            with st.spinner("🔢 Generating DART corporation code..."):
+                corp_code_data = await generate_corp_code(full_name, corp_short_list_data)
+                report_data['corp_code_data'] = corp_code_data
 
-        if not corp_code_data or "error" in corp_code_data or corp_code_data.get('corp_code') == 'N/A':
-            st.error(
-                f"❌ Failed to generate DART corporation code: {corp_code_data.get('error', 'Code is N/A or invalid')}")
-            if "raw_content" in corp_code_data: st.expander("Raw LLM Output").write(corp_code_data["raw_content"])
-            return
-
-        st.success("✅ DART Corporation code generated.")
-        with st.expander("View Corporation Code", expanded=False):
-            st.json(corp_code_data)
-
-        corp_code_value = corp_code_data['corp_code']
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with st.spinner("📄 Searching DART filings and downloading documents..."):
-                doc_path = await dart_search(corp_code_value, temp_dir)
-
-            if not doc_path:
-                st.info("❌ Failed to find or download DART documents. Using web sources instead.")
-                report_source = 'web'
+            if not corp_code_data or "error" in corp_code_data or corp_code_data.get('corp_code') == 'N/A':
+                st.info(
+                    f"ℹ️ Could not found company data in Dart Using web search instead.")
+                if "raw_content" in corp_code_data: st.expander("Raw LLM Output").write(corp_code_data["raw_content"])
+                use_web_search = True
+                web_search_reason = "corp code generation failed"
             else:
-                report_source = 'hybrid'
+                st.success("✅ DART Corporation code generated.")
+                with st.expander("View Corporation Code", expanded=False):
+                    st.json(corp_code_data)
+                corp_code_value = corp_code_data['corp_code']
 
-                display_doc_path = os.path.relpath(doc_path, temp_dir)
-                st.success(f"✅ DART documents processed. Path: {display_doc_path}")
-                with st.expander("View Document Path", expanded=False):
-                    st.write(display_doc_path)
+        if use_web_search:
+            # Use web search when DART information is not available
+            report_source = 'web'
+            report_data['report_source'] = report_source
+            report_data['web_search_reason'] = web_search_reason
 
             with st.expander('📊 Research Logs', expanded=True):
-                logs_container = st.empty()  # Create a placeholder for logs
+                logs_container = st.empty()
                 logs_container.info("Logs will appear here as the research progresses...")
-            reports_container = st.empty()  # Create a placeholder for reports
+            reports_container = st.empty()
             reports_container.info("The final report will be displayed here once generated.")
+
             report, images, logs = await dart_get_report(query=query_template, report_source=report_source,
-                                                         path=doc_path, logs_container=logs_container,
+                                                         path=None, logs_container=logs_container,
                                                          report_container=reports_container)
             report_data['report'] = report
             report_data['images'] = images
             report_data['logs'] = logs
-            st.success("✅ DART report generated successfully!")
+            st.success("✅ Report generated using web search!")
+        else:
+            # Company found in DART - proceed with filing download and report generation
+            st.info("✅ Company found in DART. Proceeding with DART filing download and report generation.")
+
+            with tempfile.TemporaryDirectory() as temp_dir:
+                with st.spinner("📄 Searching DART filings and downloading documents..."):
+                    doc_path = await dart_search(corp_code_value, temp_dir)
+
+                if not doc_path:
+                    st.info("❌ Company data is not available in Dart documents. Using web sources instead.")
+                    report_source = 'web'
+                else:
+                    report_source = 'hybrid'
+
+                    display_doc_path = os.path.relpath(doc_path, temp_dir)
+                    st.success(f"✅ DART documents processed. Path: {display_doc_path}")
+                    with st.expander("View Document Path", expanded=False):
+                        st.write(display_doc_path)
+
+                report_data['report_source'] = report_source
+
+                with st.expander('📊 Research Logs', expanded=True):
+                    logs_container = st.empty()
+                    logs_container.info("Logs will appear here as the research progresses...")
+                reports_container = st.empty()
+                reports_container.info("The final report will be displayed here once generated.")
+
+                report, images, logs = await dart_get_report(query=query_template, report_source=report_source,
+                                                             path=doc_path, logs_container=logs_container,
+                                                             report_container=reports_container)
+                report_data['report'] = report
+                report_data['images'] = images
+                report_data['logs'] = logs
+                st.success("✅ Success! Report generated using DART filings!")
 
     st.session_state.report_to_display = report_data
     st.session_state.report_list.append(report_data)
