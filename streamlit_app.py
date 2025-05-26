@@ -1,5 +1,5 @@
 import streamlit as st
-from test_functions import (
+from prom_functions import (
     generate_company_information,
     generate_corp_code,
     short_list,
