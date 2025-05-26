@@ -474,13 +474,13 @@ async def dart_get_report(query: str, report_source: str, path: str, logs_contai
 
     logs_handler = StreamlitLogHandler(logs_container, report_container)
     researcher = GPTResearcher(query=query, report_type="research_report", report_source=report_source,
-                               websocket=logs_handler,config_path="config.json")
+                               websocket=logs_handler,config_path="config_kr.json")
 
     # Load and override configuration (as in original code)
     # It's good practice to load config once if possible, or pass config dict
     report_container.info("Loading configuration...")
-    configuration = researcher.cfg.load_config("config.json")  # Or path to your config file
-    configuration['LANGUAGE'] = "korean"
+    configuration = researcher.cfg.load_config("config_kr.json")  # Or path to your config file
+    # configuration['LANGUAGE'] = "korean"
     # configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
     # configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
     # configuration['STRATEGIC_LLM'] = os.getenv("STRATEGIC_LLM", "anthropic:claude-3-5-haiku-latest")
@@ -491,7 +491,6 @@ async def dart_get_report(query: str, report_source: str, path: str, logs_contai
     # configuration['TOTAL_WORDS'] = int(os.getenv("TOTAL_WORDS", 3000))
     # configuration['MAX_SUBTOPICS'] = int(os.getenv("MAX_SUBTOPICS", 5))
     # researcher.cfg.set_openai_api_key(OPENAI_API_KEY) # If needed by GPTResearcher
-    researcher.cfg._set_attributes(configuration)
 
     report_container.info("Starting research... This may take a few minutes. ⏳")
     await researcher.conduct_research()
