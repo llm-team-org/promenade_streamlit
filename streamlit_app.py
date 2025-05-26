@@ -75,10 +75,20 @@ def set_report_to_display(report):
     st.session_state.report_to_display = report
 
 
-for report_data in st.session_state.report_list:
+# Fixed section with unique keys
+for i, report_data in enumerate(st.session_state.report_list):
     col1, col2 = st.sidebar.columns(2)
-    col1.button(f"{report_data['url']}-{report_data['language']}", on_click=set_report_to_display, args=(report_data,))
-    col2.button("❌", on_click=lambda report=report_data: st.session_state.report_list.remove(report))
+    col1.button(
+        f"{report_data['url']}-{report_data['language']}",
+        on_click=set_report_to_display,
+        args=(report_data,),
+        key=f"view_report_{i}"  # Unique key for each view button
+    )
+    col2.button(
+        "❌",
+        on_click=lambda report=report_data: st.session_state.report_list.remove(report),
+        key=f"delete_report_{i}"  # Unique key for each delete button
+    )
 
 
 def display_report(report_data):
@@ -315,7 +325,7 @@ async def generate_report_flow(company_url_input, selected_language):
         reports_container = st.empty()  # Create a placeholder for reports
         reports_container.info("The final report will be displayed here once generated.")
         report, images, logs = await sec_get_report(query=query_template, report_type="research_report",
-                                                    sources=urls, logs_container=logs_container,
+                                                    sources=urls[:2], logs_container=logs_container,
                                                     report_container=reports_container)
         report_data['report'] = report
         report_data['images'] = images
