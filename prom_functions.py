@@ -1,21 +1,21 @@
 import os
 import json
 import asyncio
-import aiofiles # Added for async file operations
+import aiofiles  # Added for async file operations
 
-from openai import AsyncOpenAI # Changed to AsyncOpenAI
+from openai import AsyncOpenAI  # Changed to AsyncOpenAI
 from tavily import AsyncTavilyClient
 from sec_api import FullTextSearchApi
 from gpt_researcher import GPTResearcher
 import dart_fss as dart
-import pandas as pd # Assuming fs[i] is a pandas DataFrame for to_csv
+import pandas as pd  # Assuming fs[i] is a pandas DataFrame for to_csv
 from typing import Dict, Any
 import streamlit as st
 import uuid
 
 from dotenv import load_dotenv
-load_dotenv()
 
+load_dotenv()
 
 # Ensure OPENAI_API_KEY is set in your environment variables or .env file
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -23,11 +23,13 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 SEC_API_KEY = os.getenv("SEC_API_KEY")
 DART_API_KEY = os.getenv("DART_API_KEY")
 
+
 class StreamlitLogHandler:
     """
     A custom logs handler for GPTResearcher that streams logs to a
     Streamlit container.
     """
+
     def __init__(self, logs_container, report_container):
         """
         Initializes the handler with a Streamlit container.
@@ -39,7 +41,7 @@ class StreamlitLogHandler:
         self.report_container = report_container
         self.logs = ""
         self.report_content = ""
-        self.lock = asyncio.Lock() # To handle async updates safely
+        self.lock = asyncio.Lock()  # To handle async updates safely
 
     async def send_json(self, data: Dict[str, Any]) -> None:
         """
@@ -88,6 +90,7 @@ class StreamlitLogHandler:
                     self.logs += error_message
                     self.logs_container.warning(error_message)
 
+
 async def tavily_web_search(query, num_results=5):
     """Perform a web search using Tavily API and return relevant information asynchronously."""
     client = AsyncTavilyClient(api_key=TAVILY_API_KEY)
@@ -102,7 +105,7 @@ async def tavily_web_search(query, num_results=5):
         include_raw_content=True,
         include_images=False
     )
-    
+
     search_results = []
     if "results" in search_response:
         for result in search_response["results"]:
@@ -115,15 +118,16 @@ async def tavily_web_search(query, num_results=5):
             })
     return search_results
 
+
 tools = [{
     "type": "function",
     "function": {
-        "name": "tavily_web_search", # This should match the async function name if used directly by OpenAI model
+        "name": "tavily_web_search",  # This should match the async function name if used directly by OpenAI model
         "description": "Get information about the user prompt using Tavily web search",
         "parameters": {
             "type": "object",
             "properties": {
-                "query": { # Parameter name changed from 'prompt' to 'query' to match tavily_web_search signature
+                "query": {  # Parameter name changed from 'prompt' to 'query' to match tavily_web_search signature
                     "type": "string",
                     "description": "Web Search query"
                 }
@@ -131,11 +135,12 @@ tools = [{
             "required": ["query"],
             "additionalProperties": False
         },
-        "strict": True # Note: 'strict' is not a standard parameter for OpenAI function definitions.
-                       # It might be specific to a library or framework you're using it with.
-                       # If it's for OpenAI API, it's usually not needed.
+        "strict": True  # Note: 'strict' is not a standard parameter for OpenAI function definitions.
+        # It might be specific to a library or framework you're using it with.
+        # If it's for OpenAI API, it's usually not needed.
     }
 }]
+
 
 async def generate_company_information(url, language):
     """Generate company information asynchronously."""
@@ -162,7 +167,7 @@ async def generate_company_information(url, language):
     }}
     """
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-    
+
     # Initial call to determine if a tool (web search) is needed
     response = await client.chat.completions.create(
         model="gpt-4o-mini",
@@ -181,13 +186,13 @@ async def generate_company_information(url, language):
         messages_history = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Give me information about this company {url}"},
-            msg, # Include the assistant's message with tool_calls
+            msg,  # Include the assistant's message with tool_calls
         ]
-        
+
         # Process each tool call
         for tool_call in msg.tool_calls:
             function_name = tool_call.function.name
-            
+
             try:
                 arguments = json.loads(tool_call.function.arguments)
             except json.JSONDecodeError:
@@ -199,7 +204,7 @@ async def generate_company_information(url, language):
                     "name": function_name,
                     "content": json.dumps({"error": "Invalid arguments received."})
                 })
-                continue # Move to the next tool call
+                continue  # Move to the next tool call
 
             tool_output = None
             if function_name == "tavily_web_search":
@@ -207,7 +212,7 @@ async def generate_company_information(url, language):
                     # Use .get for safety, prefer "query"
                     query = arguments.get("query", arguments.get("prompt"))
                     if query:
-                         tool_output = await tavily_web_search(query=query)
+                        tool_output = await tavily_web_search(query=query)
                     else:
                         tool_output = {"error": f"Missing 'query' argument for {function_name}."}
                 except Exception as e:
@@ -221,13 +226,13 @@ async def generate_company_information(url, language):
                 "role": "tool",
                 "tool_call_id": tool_call.id,
                 "name": function_name,
-                "content": json.dumps(tool_output) # Tool output must be a string
+                "content": json.dumps(tool_output)  # Tool output must be a string
             })
 
         # Send the full history including tool responses back to the model
         followup = await client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=messages_history, # Use the constructed history
+            messages=messages_history,  # Use the constructed history
             temperature=0.4,
             response_format={"type": "json_object"}
         )
@@ -247,7 +252,7 @@ async def generate_company_information(url, language):
             return content
         except json.JSONDecodeError:
             return {"error": "Failed to parse initial JSON response from LLM.", "raw_content": msg.content}
-            
+
     return {"error": "No content or tool call from LLM."}
 
 
@@ -258,7 +263,7 @@ async def generate_corp_code(company_name, short_list_data):
 
     system_prompt = f"""
     You will get a corporation name. Your job is to get corporation code.
-    
+
     This is company name : '{company_name}'
     This is the list of potential corp_code information : '{short_list_str}'
     Generate these for each user query.
@@ -273,7 +278,7 @@ async def generate_corp_code(company_name, short_list_data):
     """
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
     response = await client.chat.completions.create(
-        model="gpt-4o-mini", # Changed from gpt-4.1-nano for consistency, assuming it's a better/standard choice
+        model="gpt-4o-mini",  # Changed from gpt-4.1-nano for consistency, assuming it's a better/standard choice
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Give me the corporation code for {company_name} based on the provided list."}
@@ -294,13 +299,14 @@ async def read_json_async(file_path):
         return json.loads(content)
     except FileNotFoundError:
         print(f"Error: The file {file_path} was not found.")
-        return [] # Or raise an error, or return a specific error indicator
+        return []  # Or raise an error, or return a specific error indicator
     except json.JSONDecodeError:
         print(f"Error: Could not decode JSON from {file_path}.")
         return []
     except Exception as e:
         print(f"Error reading JSON file {file_path}: {type(e).__name__}: {e}")
         return []
+
 
 async def short_list(company_name, company_first_name):
     """
@@ -367,34 +373,37 @@ async def sec_search(company_name):
     """Asynchronously search SEC filings."""
     fullTextSearchApi = FullTextSearchApi(api_key=SEC_API_KEY)
     query = {
-      "query": company_name,
-      "formTypes": ['10-K'],
-      "startDate": '2020-01-01',
+        "query": f"Get Financial Annual report of {company_name} Corporation",
+        "formTypes": ['10-K'],
+        "startDate": '2020-01-01',
     }
     # Run synchronous SDK call in a thread
     filings = await asyncio.to_thread(fullTextSearchApi.get_filings, query)
     return filings
 
-async def sec_get_report(query: str, report_type: str, sources: list, logs_container, report_container) -> tuple[str, list]:
+
+async def sec_get_report(query: str, report_type: str, sources: list, logs_container, report_container) -> tuple[
+    str, list]:
     """Generate SEC report using GPTResearcher asynchronously."""
     logs_handler = StreamlitLogHandler(logs_container, report_container)
-    researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False, websocket=logs_handler)
+    researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
+                               websocket=logs_handler,config_path="config.json")
 
     report_container.info("Starting research... This may take a few minutes. ⏳")
-    configuration = researcher.cfg.load_config("default") # Or path to your config file
-    configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
-    configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
-    configuration['STRATEGIC_LLM'] = os.getenv("STRATEGIC_LLM", "anthropic:claude-3-5-haiku-latest")
-    configuration['FAST_TOKEN_LIMIT'] = int(os.getenv("FAST_TOKEN_LIMIT", 15000))
-    configuration['SMART_TOKEN_LIMIT'] = int(os.getenv("SMART_TOKEN_LIMIT", 15000))
-    configuration['STRATEGIC_TOKEN_LIMIT'] = int(os.getenv("STRATEGIC_TOKEN_LIMIT", 15000))
-    configuration['SUMMARY_TOKEN_LIMIT'] = int(os.getenv("SUMMARY_TOKEN_LIMIT", 1200))
-    configuration['TOTAL_WORDS'] = int(os.getenv("TOTAL_WORDS", 3000))
-    configuration['MAX_SUBTOPICS'] = int(os.getenv("MAX_SUBTOPICS", 5))
+    configuration = researcher.cfg.load_config("config.json")  # Or path to your config file
+    # configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
+    # configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
+    # configuration['STRATEGIC_LLM'] = os.getenv("STRATEGIC_LLM", "anthropic:claude-3-5-haiku-latest")
+    # configuration['FAST_TOKEN_LIMIT'] = int(os.getenv("FAST_TOKEN_LIMIT", 15000))
+    # configuration['SMART_TOKEN_LIMIT'] = int(os.getenv("SMART_TOKEN_LIMIT", 15000))
+    # configuration['STRATEGIC_TOKEN_LIMIT'] = int(os.getenv("STRATEGIC_TOKEN_LIMIT", 15000))
+    # configuration['SUMMARY_TOKEN_LIMIT'] = int(os.getenv("SUMMARY_TOKEN_LIMIT", 1200))
+    # configuration['TOTAL_WORDS'] = int(os.getenv("TOTAL_WORDS", 3000))
+    # configuration['MAX_SUBTOPICS'] = int(os.getenv("MAX_SUBTOPICS", 5))
     # Set any other necessary configurations if GPTResearcher needs them
     # e.g. researcher.cfg.set_openai_api_key(OPENAI_API_KEY) if not picked up from env by GPTResearcher
 
-    researcher.cfg._set_attributes(configuration)
+    #researcher.cfg._set_attributes(configuration)
 
     report_container.info("Starting research... This may take a few minutes. ⏳")
     await researcher.conduct_research()
@@ -410,23 +419,23 @@ def _save_dataframe_to_csv_sync(df, filename):
     """Synchronous helper to save dataframe to CSV."""
     df.to_csv(filename, sep='\t', index=False)
 
+
 async def dart_search(corp_code, temp_dir):
     """Asynchronously search DART and save documents."""
     dart.set_api_key(api_key=DART_API_KEY)
-    
+
     # These DART FSS calls are likely synchronous
     corp_list = await asyncio.to_thread(dart.corp.get_corp_list)
     company = await asyncio.to_thread(corp_list.find_by_corp_code, corp_code)
-    
+
     if not company:
         print(f"Company with corp_code {corp_code} not found in DART.")
-        return None # Indicate failure
+        return None  # Indicate failure
 
     try:
         fs_results = await asyncio.to_thread(company.extract_fs, bgn_de='20200101')
     except Exception as e:
         return None
-    
 
     folder_name = os.path.join(temp_dir, f"{corp_code}_my_docs")
     # os.makedirs is synchronous but typically very fast.
@@ -434,9 +443,9 @@ async def dart_search(corp_code, temp_dir):
     os.makedirs(folder_name, exist_ok=True)
 
     save_tasks = []
-    if fs_results: # Check if fs_results is not None and is iterable
+    if fs_results:  # Check if fs_results is not None and is iterable
         for i, df in enumerate(fs_results):
-            if isinstance(df, pd.DataFrame): # Ensure it's a DataFrame
+            if isinstance(df, pd.DataFrame):  # Ensure it's a DataFrame
                 filename = os.path.join(folder_name, f"dataframe_{i}.txt")
                 # Use asyncio.to_thread for pandas I/O operation
                 task = asyncio.to_thread(_save_dataframe_to_csv_sync, df, filename)
@@ -446,40 +455,41 @@ async def dart_search(corp_code, temp_dir):
                 print(f"Skipping fs[{i}] as it is not a DataFrame (type: {type(df)}).")
     else:
         print(f"No financial statements (fs_results) found or extracted for {corp_code}.")
-        return None # Or an empty path, depending on how you want to handle
+        return None  # Or an empty path, depending on how you want to handle
 
-    await asyncio.gather(*save_tasks) # Wait for all save operations to complete
+    await asyncio.gather(*save_tasks)  # Wait for all save operations to complete
 
     print(f"All dataframes saved successfully in {folder_name} folder!")
     return folder_name
 
 
-async def dart_get_report(query: str, report_source: str, path: str, logs_container, report_container) -> tuple[str, list]:
+async def dart_get_report(query: str, report_source: str, path: str, logs_container, report_container) -> tuple[
+    str, list]:
     """Generate DART report using GPTResearcher asynchronously."""
     # if not path: # Handle case where dart_search might have returned None
     #     return "Error: Document path not available for DART report generation.", [], ""
-    
-    if path:
-        os.environ['DOC_PATH'] = path # GPTResearcher might pick this up
 
-    
+    if path:
+        os.environ['DOC_PATH'] = path  # GPTResearcher might pick this up
+
     logs_handler = StreamlitLogHandler(logs_container, report_container)
-    researcher = GPTResearcher(query=query, report_type="research_report", report_source=report_source, websocket=logs_handler)
-    
+    researcher = GPTResearcher(query=query, report_type="research_report", report_source=report_source,
+                               websocket=logs_handler,config_path="config.json")
+
     # Load and override configuration (as in original code)
     # It's good practice to load config once if possible, or pass config dict
     report_container.info("Loading configuration...")
-    configuration = researcher.cfg.load_config("default") # Or path to your config file
+    configuration = researcher.cfg.load_config("config.json")  # Or path to your config file
     configuration['LANGUAGE'] = "korean"
-    configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
-    configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
-    configuration['STRATEGIC_LLM'] = os.getenv("STRATEGIC_LLM", "anthropic:claude-3-5-haiku-latest")
-    configuration['FAST_TOKEN_LIMIT'] = int(os.getenv("FAST_TOKEN_LIMIT", 15000))
-    configuration['SMART_TOKEN_LIMIT'] = int(os.getenv("SMART_TOKEN_LIMIT", 15000))
-    configuration['STRATEGIC_TOKEN_LIMIT'] = int(os.getenv("STRATEGIC_TOKEN_LIMIT", 15000))
-    configuration['SUMMARY_TOKEN_LIMIT'] = int(os.getenv("SUMMARY_TOKEN_LIMIT", 1200))
-    configuration['TOTAL_WORDS'] = int(os.getenv("TOTAL_WORDS", 3000))
-    configuration['MAX_SUBTOPICS'] = int(os.getenv("MAX_SUBTOPICS", 5))
+    # configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
+    # configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
+    # configuration['STRATEGIC_LLM'] = os.getenv("STRATEGIC_LLM", "anthropic:claude-3-5-haiku-latest")
+    # configuration['FAST_TOKEN_LIMIT'] = int(os.getenv("FAST_TOKEN_LIMIT", 15000))
+    # configuration['SMART_TOKEN_LIMIT'] = int(os.getenv("SMART_TOKEN_LIMIT", 15000))
+    # configuration['STRATEGIC_TOKEN_LIMIT'] = int(os.getenv("STRATEGIC_TOKEN_LIMIT", 15000))
+    # configuration['SUMMARY_TOKEN_LIMIT'] = int(os.getenv("SUMMARY_TOKEN_LIMIT", 1200))
+    # configuration['TOTAL_WORDS'] = int(os.getenv("TOTAL_WORDS", 3000))
+    # configuration['MAX_SUBTOPICS'] = int(os.getenv("MAX_SUBTOPICS", 5))
     # researcher.cfg.set_openai_api_key(OPENAI_API_KEY) # If needed by GPTResearcher
     researcher.cfg._set_attributes(configuration)
 
