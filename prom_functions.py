@@ -24,71 +24,72 @@ SEC_API_KEY = os.getenv("SEC_API_KEY")
 DART_API_KEY = os.getenv("DART_API_KEY")
 
 
-class StreamlitLogHandler:
-    """
-    A custom logs handler for GPTResearcher that streams logs to a
-    Streamlit container.
-    """
+# COMMENTED OUT: StreamlitLogHandler class for streaming logs
+# class StreamlitLogHandler:
+#     """
+#     A custom logs handler for GPTResearcher that streams logs to a
+#     Streamlit container.
+#     """
 
-    def __init__(self, logs_container, report_container):
-        """
-        Initializes the handler with a Streamlit container.
+#     def __init__(self, logs_container, report_container):
+#         """
+#         Initializes the handler with a Streamlit container.
 
-        Args:
-            container: A Streamlit container (e.g., returned by st.empty()).
-        """
-        self.logs_container = logs_container
-        self.report_container = report_container
-        self.logs = ""
-        self.report_content = ""
-        self.lock = asyncio.Lock()  # To handle async updates safely
+#         Args:
+#             container: A Streamlit container (e.g., returned by st.empty()).
+#         """
+#         self.logs_container = logs_container
+#         self.report_container = report_container
+#         self.logs = ""
+#         self.report_content = ""
+#         self.lock = asyncio.Lock()  # To handle async updates safely
 
-    async def send_json(self, data: Dict[str, Any]) -> None:
-        """
-        Receives JSON data from GPTResearcher and displays it in Streamlit.
-        This method is called by GPTResearcher during its process.
-        """
-        async with self.lock:
-            if data['type'] == 'report':
-                try:
-                    # Extract a meaningful message or format the JSON
-                    if 'message' in data:
-                        message = data['message']
-                    elif 'output' in data:
-                        message = data['output']
-                    else:
-                        # Default to a formatted JSON string
-                        message = f"```json\n{json.dumps(data, indent=2)}\n```"
+#     async def send_json(self, data: Dict[str, Any]) -> None:
+#         """
+#         Receives JSON data from GPTResearcher and displays it in Streamlit.
+#         This method is called by GPTResearcher during its process.
+#         """
+#         async with self.lock:
+#             if data['type'] == 'report':
+#                 try:
+#                     # Extract a meaningful message or format the JSON
+#                     if 'message' in data:
+#                         message = data['message']
+#                     elif 'output' in data:
+#                         message = data['output']
+#                     else:
+#                         # Default to a formatted JSON string
+#                         message = f"```json\n{json.dumps(data, indent=2)}\n```"
 
-                    # Append new log and update the container
-                    self.report_content += message + "\n\n"
-                    self.report_container.markdown(self.report_content)
+#                     # Append new log and update the container
+#                     self.report_content += message + "\n\n"
+#                     self.report_container.markdown(self.report_content)
 
-                except Exception as e:
-                    # Fallback for any processing errors
-                    error_message = f"Error processing log: {e}\n{str(data)}\n\n"
-                    self.report_content += error_message
-                    self.report_container.warning(error_message)
-            else:
-                try:
-                    # Extract a meaningful message or format the JSON
-                    if 'message' in data:
-                        message = data['message']
-                    elif 'output' in data:
-                        message = data['output']
-                    else:
-                        # Default to a formatted JSON string
-                        message = f"```json\n{json.dumps(data, indent=2)}\n```"
+#                 except Exception as e:
+#                     # Fallback for any processing errors
+#                     error_message = f"Error processing log: {e}\n{str(data)}\n\n"
+#                     self.report_content += error_message
+#                     self.report_container.warning(error_message)
+#             else:
+#                 try:
+#                     # Extract a meaningful message or format the JSON
+#                     if 'message' in data:
+#                         message = data['message']
+#                     elif 'output' in data:
+#                         message = data['output']
+#                     else:
+#                         # Default to a formatted JSON string
+#                         message = f"```json\n{json.dumps(data, indent=2)}\n```"
 
-                    # Append new log and update the container
-                    self.logs += message + "\n\n"
-                    self.logs_container.markdown(self.logs)
+#                     # Append new log and update the container
+#                     self.logs += message + "\n\n"
+#                     self.logs_container.markdown(self.logs)
 
-                except Exception as e:
-                    # Fallback for any processing errors
-                    error_message = f"Error processing log: {e}\n{str(data)}\n\n"
-                    self.logs += error_message
-                    self.logs_container.warning(error_message)
+#                 except Exception as e:
+#                     # Fallback for any processing errors
+#                     error_message = f"Error processing log: {e}\n{str(data)}\n\n"
+#                     self.logs += error_message
+#                     self.logs_container.warning(error_message)
 
 
 async def tavily_web_search(query, num_results=5):
@@ -382,15 +383,20 @@ async def sec_search(company_name):
     return filings
 
 
-async def sec_get_report(query: str, report_type: str, sources: list, logs_container, report_container) -> tuple[
-    str, list]:
+# MODIFIED: Removed streaming containers from function signature
+async def sec_get_report(query: str, report_type: str, sources: list) -> tuple[str, list]:
     """Generate SEC report using GPTResearcher asynchronously."""
-    logs_handler = StreamlitLogHandler(logs_container, report_container)
-    researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
-                               websocket=logs_handler,config_path="config.json")
+    # COMMENTED OUT: StreamlitLogHandler for streaming logs
+    # logs_handler = StreamlitLogHandler(logs_container, report_container)
 
-    report_container.info("Starting research... This may take a few minutes. ⏳")
-    configuration = researcher.cfg.load_config("config.json")  # Or path to your config file
+    # MODIFIED: Removed websocket parameter (streaming handler)
+    researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
+                               config_path="config.json")
+
+    # COMMENTED OUT: Report container info messages
+    # report_container.info("Starting research... This may take a few minutes. ⏳")
+
+    researcher.cfg.load_config("config.json")  # Or path to your config file
     # configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
     # configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
     # configuration['STRATEGIC_LLM'] = os.getenv("STRATEGIC_LLM", "anthropic:claude-3-5-haiku-latest")
@@ -403,16 +409,19 @@ async def sec_get_report(query: str, report_type: str, sources: list, logs_conta
     # Set any other necessary configurations if GPTResearcher needs them
     # e.g. researcher.cfg.set_openai_api_key(OPENAI_API_KEY) if not picked up from env by GPTResearcher
 
-    #researcher.cfg._set_attributes(configuration)
+    # researcher.cfg._set_attributes(configuration)
 
-    report_container.info("Starting research... This may take a few minutes. ⏳")
+    # COMMENTED OUT: Report container info messages
+    # report_container.info("Starting research... This may take a few minutes. ⏳")
     await researcher.conduct_research()
-    report_container.info("Writing report... This may take a few minutes. ⏳")
+    # report_container.info("Writing report... This may take a few minutes. ⏳")
     report = await researcher.write_report()
     research_images = []
     # report_container.info("Writing images... This may take a few minutes. ⏳")
     # research_images = researcher.get_research_images()
-    return report, research_images, logs_handler.logs
+
+    # MODIFIED: Return empty string for logs since streaming is disabled
+    return report, research_images, ""
 
 
 def _save_dataframe_to_csv_sync(df, filename):
@@ -463,8 +472,8 @@ async def dart_search(corp_code, temp_dir):
     return folder_name
 
 
-async def dart_get_report(query: str, report_source: str, path: str, logs_container, report_container) -> tuple[
-    str, list]:
+# MODIFIED: Removed streaming containers from function signature
+async def dart_get_report(query: str, report_source: str, path: str) -> tuple[str, list]:
     """Generate DART report using GPTResearcher asynchronously."""
     # if not path: # Handle case where dart_search might have returned None
     #     return "Error: Document path not available for DART report generation.", [], ""
@@ -472,14 +481,18 @@ async def dart_get_report(query: str, report_source: str, path: str, logs_contai
     if path:
         os.environ['DOC_PATH'] = path  # GPTResearcher might pick this up
 
-    logs_handler = StreamlitLogHandler(logs_container, report_container)
+    # COMMENTED OUT: StreamlitLogHandler for streaming logs
+    # logs_handler = StreamlitLogHandler(logs_container, report_container)
+
+    # MODIFIED: Removed websocket parameter (streaming handler)
     researcher = GPTResearcher(query=query, report_type="research_report", report_source=report_source,
-                               websocket=logs_handler,config_path="config_kr.json")
+                               config_path="config_kr.json")
 
     # Load and override configuration (as in original code)
     # It's good practice to load config once if possible, or pass config dict
-    report_container.info("Loading configuration...")
-    configuration = researcher.cfg.load_config("config_kr.json")  # Or path to your config file
+    # COMMENTED OUT: Report container info messages
+    # report_container.info("Loading configuration...")
+    researcher.cfg.load_config("config_kr.json")  # Or path to your config file
     # configuration['LANGUAGE'] = "korean"
     # configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
     # configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
@@ -492,11 +505,14 @@ async def dart_get_report(query: str, report_source: str, path: str, logs_contai
     # configuration['MAX_SUBTOPICS'] = int(os.getenv("MAX_SUBTOPICS", 5))
     # researcher.cfg.set_openai_api_key(OPENAI_API_KEY) # If needed by GPTResearcher
 
-    report_container.info("Starting research... This may take a few minutes. ⏳")
+    # COMMENTED OUT: Report container info messages
+    # report_container.info("Starting research... This may take a few minutes. ⏳")
     await researcher.conduct_research()
-    report_container.info("Writing report... This may take a few minutes. ⏳")
+    # report_container.info("Writing report... This may take a few minutes. ⏳")
     report = await researcher.write_report()
     research_images = []
     # report_container.info("Generating report images... This may take a few minutes. ⏳")
     # research_images = researcher.get_research_images()
-    return report, research_images, logs_handler.logs
+
+    # MODIFIED: Return empty string for logs since streaming is disabled
+    return report, research_images, ""
