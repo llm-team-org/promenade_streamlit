@@ -153,9 +153,11 @@ async def generate_company_information(url, language):
     1. Company Name. (Get company name from its url.
     2. Name of Company's Industry.
     3. Carefully understand the industry of company and name Top 5 related industry competitors of Company.
-    4. Generate all information 'company_name','description', 'company_first_name', "ticker", 'industry' and 'competitors'.
-    5. Generate all information only in {language} language. Even if company name is in any translate it to {language} and give {language} name.
-
+    4. Generate all information only in {language} language. Even if company name is in any translate it to {language} and give {language} name.
+    5. Generate all information 'company_name','description', 'company_first_name', "ticker", 'industry' and 'competitors'.
+    6. Ticker for korean companies are their stock code numbered value ending with '.KS' search carefully about ticker value of company.
+    
+    
     Return a JSON object where keys are slide numbers (1-based) and values are the content.
     Please respond ONLY with a JSON object in the following format (nothing else):
     {{
@@ -370,11 +372,14 @@ async def short_list(company_name, company_first_name):
     return short_lists
 
 
-async def sec_search(company_name):
+async def sec_search(company_name,ticker):
     """Asynchronously search SEC filings."""
+    if ticker == 'N/A':
+        ticker="corporation"
+
     fullTextSearchApi = FullTextSearchApi(api_key=SEC_API_KEY)
     query = {
-        "query": f"{company_name} corporation",
+        "query": f"{company_name} {ticker}",
         "formTypes": ['10-K'],
         "startDate": '2020-01-01',
     }
