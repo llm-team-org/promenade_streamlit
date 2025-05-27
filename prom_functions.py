@@ -153,12 +153,9 @@ async def generate_company_information(url, language):
     1. Company Name. (Get company name from its url.
     2. Name of Company's Industry.
     3. Carefully understand the industry of company and name Top 5 related industry competitors of Company.
-    4. Generate all information only in {language} language. Even if company name is in any translate it to {language} and give {language} name.
-    5. Generate all information 'company_name','description', 'company_first_name', "ticker", 'industry' and 'competitors'.
-    6. Ticker for korean companies are their stock code numbered value ending with '.KS' search carefully about ticker value of company.
+    4. Generate all information 'company_name','description', 'company_first_name', "ticker", 'industry' and 'competitors'.
+    5. Generate all information only in {language} language. Even if company name is in any translate it to {language} and give {language} name.
     
-    
-    Return a JSON object where keys are slide numbers (1-based) and values are the content.
     Please respond ONLY with a JSON object in the following format (nothing else):
     {{
         "company_name": "Full company name",
@@ -173,7 +170,7 @@ async def generate_company_information(url, language):
 
     # Initial call to determine if a tool (web search) is needed
     response = await client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4.1-nano",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Give me information about this company {url}"}
@@ -234,7 +231,7 @@ async def generate_company_information(url, language):
 
         # Send the full history including tool responses back to the model
         followup = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1-nano",
             messages=messages_history,  # Use the constructed history
             temperature=0.4,
             response_format={"type": "json_object"}
@@ -257,6 +254,17 @@ async def generate_company_information(url, language):
             return {"error": "Failed to parse initial JSON response from LLM.", "raw_content": msg.content}
 
     return {"error": "No content or tool call from LLM."}
+
+
+async def get_company_information(company_name):
+    corp_list = dart.get_corp_list()
+    corp = corp_list.find_by_corp_name(company_name, exactly=True, market='YKNE')
+    corp_data=[]
+    for info in corp:
+        corp_code = info.corp_code
+        corp_info = dart.api.filings.get_corp_info(corp_code=corp_code)
+        corp_data.append(corp_info)
+    return corp_data
 
 
 async def generate_corp_code(company_name, short_list_data):
