@@ -1,5 +1,5 @@
 import streamlit as st
-from prom_functions import (
+from test_functions import (
     generate_company_information,
     generate_corp_code,
     short_list,
@@ -100,7 +100,7 @@ def markdown_to_docx(markdown_text, company_name):
     doc = Document()
 
     # Add title
-    title = doc.add_heading(f'Investment Report - {company_name}', 0)
+    title = doc.add_heading(f'Information Memorandum - {company_name}', 0)
 
     # Split markdown into lines and process
     lines = markdown_text.split('\n')
@@ -363,7 +363,7 @@ async def generate_report_flow(company_url_input, selected_language):
 
             try:
                 with st.spinner("📄 Searching SEC filings..."):
-                    filings_data = await sec_search(full_name)
+                    filings_data = await sec_search(full_name,ticker)
                     report_data['filings_data'] = filings_data
 
                 if not filings_data or not filings_data.get('filings'):
