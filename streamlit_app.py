@@ -603,7 +603,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center'>
-        <p>IM Report Generator | Powered by doAZ</p>
+        <p>IM Report Generator</p>
     </div>
     """,
     unsafe_allow_html=True
