@@ -374,7 +374,7 @@ async def sec_search(company_name):
     """Asynchronously search SEC filings."""
     fullTextSearchApi = FullTextSearchApi(api_key=SEC_API_KEY)
     query = {
-        "query": f"Get Financial Annual report of {company_name} Corporation",
+        "query": f"{company_name} corporation",
         "formTypes": ['10-K'],
         "startDate": '2020-01-01',
     }
