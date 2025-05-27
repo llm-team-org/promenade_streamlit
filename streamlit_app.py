@@ -158,25 +158,40 @@ def display_report(report_data):
     # Extract key information
     full_name = company_data.get('company_name', 'N/A')
     first_name = company_data.get('company_first_name', 'N/A')
-    ticker = company_data.get('ticker', 'N/A')
+    selected_language = report_data.get('language', '')
+
+    # Conditional display based on language
+    if selected_language.lower() == "english":
+        ticker = company_data.get('ticker', 'N/A')
+        # Display basic info for English/SEC
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Company Name", full_name)
+        with col2:
+            st.metric("First Name", first_name)
+        with col3:
+            st.metric("Ticker", ticker)
+    else:
+        # For Korean/DART, show corp code instead of ticker
+        corp_code_data = report_data.get('corp_code_data', {})
+        corp_code = corp_code_data.get('corp_code', 'N/A') if corp_code_data else 'N/A'
+
+        # Display basic info for Korean/DART
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Company Name", full_name)
+        with col2:
+            st.metric("First Name", first_name)
+        with col3:
+            st.metric("Corp Code", corp_code)
 
     if full_name == 'N/A':
         st.error("❌ Company name could not be determined. Cannot proceed.")
         return
 
-    # Display basic info
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Company Name", full_name)
-    with col2:
-        st.metric("First Name", first_name)
-    with col3:
-        st.metric("Ticker", ticker)
-
     st.markdown("---")
     report = report_data.get('report', '')
     images = report_data.get('images', [])
-    selected_language = report_data.get('language', '')
 
     # Process based on language
     if selected_language.lower() == "english":
@@ -278,7 +293,7 @@ def display_report(report_data):
         st.markdown(report)
 
     elif not (
-    "Error" in report if isinstance(report, str) else False):  # Only show if no error message already in report
+            "Error" in report if isinstance(report, str) else False):  # Only show if no error message already in report
         st.info("ℹ️ Report generation did not produce output, or path was skipped.")
 
     # Display images if any
@@ -297,7 +312,8 @@ async def generate_report_flow(company_url_input, selected_language):
         # Step 1: Generate company information
         with st.spinner("🔍 Analyzing company information..."):
             company_data = await generate_company_information(company_url_input, selected_language)
-            report_data['company_data'] = company_data
+            report=company_data
+            report_data['company_data'] = report
 
         if not company_data or "error" in company_data:
             st.error(f"❌ Failed to extract company information: {company_data.get('error', 'Unknown error')}")
@@ -315,20 +331,23 @@ async def generate_report_flow(company_url_input, selected_language):
         # Extract key information
         full_name = company_data.get('company_name', 'N/A')
         first_name = company_data.get('company_first_name', 'N/A')
-        ticker = company_data.get('ticker', 'N/A')
 
         if full_name == 'N/A':
             st.error("❌ Company name could not be determined. Cannot proceed.")
             return
 
-        # Display basic info
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Company Name", full_name)
-        with col2:
-            st.metric("First Name", first_name)
-        with col3:
-            st.metric("Ticker", ticker)
+        # Conditional display based on language during generation
+        if selected_language.lower() == "english":
+            ticker = company_data.get('ticker', 'N/A')
+            # Display basic info for English/SEC
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Company Name", full_name)
+            with col2:
+                st.metric("First Name", first_name)
+            with col3:
+                st.metric("Ticker", ticker)
+        # For Korean/DART, we'll only show metrics after corp code is generated
 
         # Query template
         query_template = f"""As an investment associate, draft an information memorandum for company: {full_name}
@@ -363,7 +382,7 @@ async def generate_report_flow(company_url_input, selected_language):
 
             try:
                 with st.spinner("📄 Searching SEC filings..."):
-                    filings_data = await sec_search(full_name,ticker)
+                    filings_data = await sec_search(full_name, ticker)
                     report_data['filings_data'] = filings_data
 
                 if not filings_data or not filings_data.get('filings'):
@@ -378,28 +397,21 @@ async def generate_report_flow(company_url_input, selected_language):
                     if not urls:
                         st.warning("⚠️ No URLs found in SEC filings to generate report from.")
 
-                # Commented out streaming logs containers
-                # with st.expander('📊 Research Logs', expanded=True):
-                #     logs_container = st.empty()
-                #     logs_container.info("Logs will appear here as the research progresses...")
-                # reports_container = st.empty()
-                # reports_container.info("The final report will be displayed here once generated.")
-
                 # Add error handling for SEC report generation
                 try:
-                    with st.spinner("📊 Generating comprehensive SEC report..."):
+                    with st.spinner("📊 Generating comprehensive IM report..."):
                         # Modified to not pass streaming containers - remove them entirely
                         report, images, logs = await sec_get_report(
                             query=query_template,
                             report_type="research_report",
-                            sources=urls[:2]
+                            sources=urls
                         )
                     report_data['report'] = report
                     report_data['images'] = images
                     # report_data['logs'] = logs  # Commented out logs
-                    st.success("✅ SEC report generated successfully!")
+                    st.success("✅ IM report generated successfully!")
                 except Exception as sec_error:
-                    st.error(f"❌ Error generating SEC report: {str(sec_error)}")
+                    st.error(f"❌ Error generating report: {str(sec_error)}")
                     # Log the full error for debugging
                     st.expander("Error Details").write(f"Full error: {traceback.format_exc()}")
                     # Set fallback values
@@ -457,23 +469,26 @@ async def generate_report_flow(company_url_input, selected_language):
                             st.json(corp_code_data)
                         corp_code_value = corp_code_data['corp_code']
 
+                        # Show the complete metrics including corp code only once here
+                        st.markdown("### 📊 Company Metrics")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Company Name", full_name)
+                        with col2:
+                            st.metric("First Name", first_name)
+                        with col3:
+                            st.metric("Corp Code", corp_code_value)
+
                 if use_web_search:
                     report_source = 'web'
                     report_data['report_source'] = report_source
                     report_data['web_search_reason'] = web_search_reason
 
-                    # Commented out streaming logs containers
-                    # with st.expander('📊 Research Logs', expanded=True):
-                    #     logs_container = st.empty()
-                    #     logs_container.info("Logs will appear here as the research progresses...")
-                    # reports_container = st.empty()
-                    # reports_container.info("The final report will be displayed here once generated.")
-
                     try:
-                        with st.spinner("📊 Generating report using web search..."):
+                        with st.spinner("📊 Generating IM report using web search..."):
                             report, images, logs = await dart_get_report(
                                 query=query_template,
-                                report_source=report_source,
+                                report_source="web",
                                 path=None
                             )
                         report_data['report'] = report
@@ -506,15 +521,8 @@ async def generate_report_flow(company_url_input, selected_language):
 
                             report_data['report_source'] = report_source
 
-                            # Commented out streaming logs containers
-                            # with st.expander('📊 Research Logs', expanded=True):
-                            #     logs_container = st.empty()
-                            #     logs_container.info("Logs will appear here as the research progresses...")
-                            # reports_container = st.empty()
-                            # reports_container.info("The final report will be displayed here once generated.")
-
                             try:
-                                with st.spinner("📊 Generating comprehensive DART report..."):
+                                with st.spinner("📊 Generating comprehensive IM report..."):
                                     report, images, logs = await dart_get_report(
                                         query=query_template,
                                         report_source=report_source,
@@ -525,7 +533,7 @@ async def generate_report_flow(company_url_input, selected_language):
                                 # report_data['logs'] = logs  # Commented out logs
                                 st.success("✅ Success! Report generated using DART filings!")
                             except Exception as dart_filing_error:
-                                st.error(f"❌ Error generating DART report (filings): {str(dart_filing_error)}")
+                                st.error(f"❌ Error generating report: {str(dart_filing_error)}")
                                 st.expander("Error Details").write(f"Full error: {traceback.format_exc()}")
                                 report_data['report'] = f"Error generating report: {str(dart_filing_error)}"
                                 report_data['images'] = []
@@ -575,7 +583,7 @@ elif st.session_state.report_to_display:
 else:
     # Welcome message (no changes here)
     st.markdown("""
-    ## Welcome to the Investment Report Generator! 👋
+    ## Welcome to the Information Memorendom Report Generator! 👋
 
     This application helps you generate comprehensive investment reports for companies using:
 
