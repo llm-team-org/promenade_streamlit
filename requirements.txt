@@ -7,3 +7,16 @@ sec-api
 dart-fss
 streamlit
 aiofiles
+python-dotenv
+pydantic_ai
+langchain 
+pypdf2
+openpyxl 
+python-docx
+docx2txt
+google-genai
+langchain-community
+langchain_openai
+faiss-cpu
+pandas
+xlsxwriter

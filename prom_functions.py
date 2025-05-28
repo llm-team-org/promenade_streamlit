@@ -470,16 +470,24 @@ async def dart_get_report(query: str, report_source: str, path: str, logs_contai
     #     return "Error: Document path not available for DART report generation.", [], ""
 
     if path:
+        with open('doc_path.txt','w') as f:
+            f.write(path)
         os.environ['DOC_PATH'] = path  # GPTResearcher might pick this up
+    elif path == None:
+        with open('doc_path.txt','w') as f:
+            f.write(f"Path is None\nReport_source is {report_source}")
+        report_source='web'
 
     logs_handler = StreamlitLogHandler(logs_container, report_container)
     researcher = GPTResearcher(query=query, report_type="research_report", report_source=report_source,
-                               websocket=logs_handler,config_path="config_kr.json")
+                               websocket=logs_handler)
+    configuration = json.load(open('config_kr.json','r'))
+    researcher.cfg._set_attributes(configuration)
 
     # Load and override configuration (as in original code)
     # It's good practice to load config once if possible, or pass config dict
     report_container.info("Loading configuration...")
-    configuration = researcher.cfg.load_config("config_kr.json")  # Or path to your config file
+    # configuration = researcher.cfg.load_config("config_kr.json")  # Or path to your config file
     # configuration['LANGUAGE'] = "korean"
     # configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
     # configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
