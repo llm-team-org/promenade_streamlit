@@ -387,10 +387,10 @@ async def sec_get_report(query: str, report_type: str, sources: list, logs_conta
     """Generate SEC report using GPTResearcher asynchronously."""
     logs_handler = StreamlitLogHandler(logs_container, report_container)
     researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
-                               websocket=logs_handler,config_path="config.json")
+                               websocket=logs_handler)
 
     report_container.info("Starting research... This may take a few minutes. ⏳")
-    configuration = researcher.cfg.load_config("config.json")  # Or path to your config file
+    configuration = json.load(open("config.json","r"))  # Or path to your config file
     # configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
     # configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
     # configuration['STRATEGIC_LLM'] = os.getenv("STRATEGIC_LLM", "anthropic:claude-3-5-haiku-latest")
@@ -403,7 +403,7 @@ async def sec_get_report(query: str, report_type: str, sources: list, logs_conta
     # Set any other necessary configurations if GPTResearcher needs them
     # e.g. researcher.cfg.set_openai_api_key(OPENAI_API_KEY) if not picked up from env by GPTResearcher
 
-    #researcher.cfg._set_attributes(configuration)
+    researcher.cfg._set_attributes(configuration)
 
     report_container.info("Starting research... This may take a few minutes. ⏳")
     await researcher.conduct_research()
