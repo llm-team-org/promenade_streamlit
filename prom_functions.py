@@ -256,30 +256,55 @@ async def generate_company_information(url, language):
     return {"error": "No content or tool call from LLM."}
 
 
-async def get_company_information(company_name):
+async def get_dart_company_information(company_name, first_name):
     corp_list = dart.get_corp_list()
-    corp = corp_list.find_by_corp_name(company_name, exactly=True, market='YKNE')
-    corp_data=[]
+    corp = None
+
+    # First try with full company name
+    try:
+        corp = corp_list.find_by_corp_name(company_name, exactly=True, market='YKNE')
+        if not corp:
+            corp = corp_list.find_by_corp_name(company_name, exactly=False, market='YKNE')
+    except:
+        pass
+
+    # If not found, try with first name
+    if not corp:
+        try:
+            corp = corp_list.find_by_corp_name(first_name, exactly=True, market='YKNE')
+            if not corp:
+                corp = corp_list.find_by_corp_name(first_name, exactly=False, market='YKNE')
+        except:
+            pass
+
+    # If still not found, return None
+    if not corp:
+        return "This company is not in the dart list"
+
+    corp_data = []
     for info in corp:
         corp_code = info.corp_code
         corp_info = dart.api.filings.get_corp_info(corp_code=corp_code)
         corp_data.append(corp_info)
+
     return corp_data
 
 
-async def generate_corp_code(company_name, short_list_data):
+async def generate_corp_code(company_name, short_list_data,url):
     """Generate corporation code asynchronously."""
     # Ensure short_list_data is stringified if it's complex for the prompt
     short_list_str = json.dumps(short_list_data) if not isinstance(short_list_data, str) else short_list_data
 
     system_prompt = f"""
-    You will get a corporation name. Your job is to get corporation code.
+    You will get a corporation name and list of corporation names with some information. Your job is to identify which corporation information is user want.
 
     This is company name : '{company_name}'
-    This is the list of potential corp_code information : '{short_list_str}'
-    Generate these for each user query.
+    Company website url : '{url}'
+    This is the list of potential corporation information : '{short_list_str}'
 
-    Carefully choose the correct 8-digit corp_code by matching the company name with the provided list.
+    check 'hm_url' of all potential corporation and match it with company website url whichever is closest to company website url return its corp_code
+    
+    Carefully choose the correct 8-digit corp_code by matching the corp_name and hm_url with user input company_name and website url
     If you cannot find a relevant code, return "N/A" for the corp_code value.
 
     Respond ONLY with a JSON object in the following format (nothing else):
@@ -289,7 +314,7 @@ async def generate_corp_code(company_name, short_list_data):
     """
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
     response = await client.chat.completions.create(
-        model="gpt-4o-mini",  # Changed from gpt-4.1-nano for consistency, assuming it's a better/standard choice
+        model="gpt-4.1-nano",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Give me the corporation code for {company_name} based on the provided list."}
@@ -493,39 +518,35 @@ async def dart_get_report(query: str, report_source: str, path: str) -> tuple[st
 
     if path:
         os.environ['DOC_PATH'] = path  # GPTResearcher might pick this up
+        researcher = GPTResearcher(query=query, report_type="research_report", report_source="hybrid",
+                                   config_path="config_kr.json")
+        researcher.cfg.load_config("config_kr.json")  # Or path to your config file
+        await researcher.conduct_research()
+        report = await researcher.write_report()
+        research_images = []
+        return report, research_images, ""
+    else:
+        researcher = GPTResearcher(query=query, report_type="research_report",config_path="config_kr.json")
+        researcher.cfg.load_config("config_kr.json")
+        await researcher.conduct_research()
+        report = await researcher.write_report()
+        research_images = []
+        return report, research_images, ""
+
 
     # COMMENTED OUT: StreamlitLogHandler for streaming logs
     # logs_handler = StreamlitLogHandler(logs_container, report_container)
 
     # MODIFIED: Removed websocket parameter (streaming handler)
-    researcher = GPTResearcher(query=query, report_type="research_report", report_source=report_source,
-                               config_path="config_kr.json")
 
-    # Load and override configuration (as in original code)
-    # It's good practice to load config once if possible, or pass config dict
-    # COMMENTED OUT: Report container info messages
-    # report_container.info("Loading configuration...")
-    researcher.cfg.load_config("config_kr.json")  # Or path to your config file
-    # configuration['LANGUAGE'] = "korean"
-    # configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
-    # configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
-    # configuration['STRATEGIC_LLM'] = os.getenv("STRATEGIC_LLM", "anthropic:claude-3-5-haiku-latest")
-    # configuration['FAST_TOKEN_LIMIT'] = int(os.getenv("FAST_TOKEN_LIMIT", 15000))
-    # configuration['SMART_TOKEN_LIMIT'] = int(os.getenv("SMART_TOKEN_LIMIT", 15000))
-    # configuration['STRATEGIC_TOKEN_LIMIT'] = int(os.getenv("STRATEGIC_TOKEN_LIMIT", 15000))
-    # configuration['SUMMARY_TOKEN_LIMIT'] = int(os.getenv("SUMMARY_TOKEN_LIMIT", 1200))
-    # configuration['TOTAL_WORDS'] = int(os.getenv("TOTAL_WORDS", 3000))
-    # configuration['MAX_SUBTOPICS'] = int(os.getenv("MAX_SUBTOPICS", 5))
-    # researcher.cfg.set_openai_api_key(OPENAI_API_KEY) # If needed by GPTResearcher
+
 
     # COMMENTED OUT: Report container info messages
     # report_container.info("Starting research... This may take a few minutes. ⏳")
-    await researcher.conduct_research()
     # report_container.info("Writing report... This may take a few minutes. ⏳")
-    report = await researcher.write_report()
-    research_images = []
+
     # report_container.info("Generating report images... This may take a few minutes. ⏳")
     # research_images = researcher.get_research_images()
 
     # MODIFIED: Return empty string for logs since streaming is disabled
-    return report, research_images, ""
+    # return report, research_images, ""
