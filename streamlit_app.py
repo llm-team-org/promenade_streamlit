@@ -528,7 +528,7 @@ async def generate_report_flow(company_url_input, selected_language):
                     with st.spinner("🔢 Generating DART corporation code..."):
                         corp_code_data = await generate_corp_code(full_name, corp_short_list_data, company_url_input)
                         st.write(corp_code_data)
-                        if corp_code_data:
+                        if corp_code_data !='N/A':
                             corp_code_data=corp_short_list_data[int(corp_code_data)]
                             report_data['corp_code_data'] = corp_code_data
     
