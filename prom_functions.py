@@ -296,22 +296,21 @@ async def generate_corp_code(company_name, short_list_data,url):
     short_list_str = json.dumps(short_list_data) if not isinstance(short_list_data, str) else short_list_data
 
     system_prompt = f"""
-    You will get a corporation name and list of corporation names with some information. Your job is to identify which corporation information is user want.
-
-    This is company name : '{company_name}'
-    Company website url : '{url}'
-    This is the list of potential corporation information : '{short_list_str}'
-
-    check 'hm_url' of all potential corporation and match it with company website url whichever is closest to company website url return its corp_code
+    You are given:
+    - A target company name: '{company_name}'
+    - A target company website URL: '{url}'
+    - A list of potential corporations with information: '{short_list_str}'
     
-    Carefully choose the correct 8-digit corp_code by matching the corp_name and hm_url with user input company_name and website url
-    If you cannot find a relevant code, return "N/A" for the corp_code value.
-
-    Respond ONLY with a JSON object in the following format (nothing else):
-    {{
-        "corp_code": "8_digit_code_or_NA"
-    }}
+    
+    FROM THE GIVEN LIST CHOOSE 1 AND RETURN ME THAT AS IT IS
+    
+    Compare the company name and company website URL with the list of potential corporations with information and return me the one list as it is you get which perfectly matches with the the given company name and url
+    
+    Return only the index of list like 0,1,2 which matches the best. Nothing else just the index
+    
+    If no relevant corporation is found in the list, return "N/A".
     """
+
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
     response = await client.chat.completions.create(
         model="gpt-4.1-nano",
@@ -319,10 +318,11 @@ async def generate_corp_code(company_name, short_list_data,url):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Give me the corporation code for {company_name} based on the provided list."}
         ],
-        response_format={"type": "json_object"}
+        #response_format={"type": "json_object"}
     )
     try:
-        return json.loads(response.choices[0].message.content)
+        #return json.loads(response.choices[0].message.content)
+        return response.choices[0].message.content
     except json.JSONDecodeError:
         return {"corp_code": "N/A", "error": "Failed to parse JSON from LLM for corp_code."}
 
