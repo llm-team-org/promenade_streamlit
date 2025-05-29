@@ -16,6 +16,8 @@ import tempfile
 import traceback
 from docx import Document
 from docx.shared import Inches
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 import io
 
 # Apply nest_asyncio to handle asyncio in Streamlit (as in original)
@@ -96,12 +98,77 @@ for i, report_data in enumerate(st.session_state.report_list):
     )
 
 
-def markdown_to_docx(markdown_text, company_name):
+def add_dart_company_table(doc, corp_code_data):
+    """Add DART company information table to the document"""
+    # Add a heading for company information
+    doc.add_heading('Company Information (DART)', level=1)
+
+    # Create a table with 2 columns (Field, Value)
+    table = doc.add_table(rows=1, cols=2)
+    table.style = 'Table Grid'
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    # Add header row
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = 'Field'
+    hdr_cells[1].text = 'Value'
+
+    # Make header bold
+    for cell in hdr_cells:
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                run.bold = True
+        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Field mappings for better display names
+    field_mappings = {
+        'status': 'Status',
+        'message': 'Message',
+        'corp_code': 'Corporation Code',
+        'corp_name': 'Corporation Name',
+        'corp_name_eng': 'Corporation Name (English)',
+        'stock_name': 'Stock Name',
+        'stock_code': 'Stock Code',
+        'ceo_nm': 'CEO Name',
+        'corp_cls': 'Corporation Class',
+        'jurir_no': 'Juridical Number',
+        'bizr_no': 'Business Registration Number',
+        'adres': 'Address',
+        'hm_url': 'Homepage URL',
+        'ir_url': 'IR URL',
+        'phn_no': 'Phone Number',
+        'fax_no': 'Fax Number',
+        'induty_code': 'Industry Code',
+        'est_dt': 'Establishment Date',
+        'acc_mt': 'Account Month'
+    }
+
+    # Add data rows
+    for key, value in corp_code_data.items():
+        if key in field_mappings:  # Only add mapped fields
+            row_cells = table.add_row().cells
+            row_cells[0].text = field_mappings[key]
+            row_cells[1].text = str(value) if value else 'N/A'
+
+            # Center align the first column
+            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    # Add some spacing after the table
+    doc.add_paragraph()
+    doc.add_page_break()
+
+
+def markdown_to_docx(markdown_text, company_name, language="english", corp_code_data=None):
     """Convert markdown text to a Word document"""
     doc = Document()
 
     # Add title
     title = doc.add_heading(f'Information Memorandum - {company_name}', 0)
+
+    # Add DART company table if it's Korean language and corp_code_data is available
+    if language.lower() == "korean" and corp_code_data and isinstance(corp_code_data,
+                                                                      dict) and "error" not in corp_code_data:
+        add_dart_company_table(doc, corp_code_data)
 
     # Split markdown into lines and process
     lines = markdown_text.split('\n')
@@ -272,8 +339,9 @@ def display_report(report_data):
             )
 
         with col2:
-            # Create Word document
-            doc = markdown_to_docx(report, full_name)
+            # Create Word document - pass corp_code_data for DART reports
+            corp_code_data = report_data.get('corp_code_data', {}) if selected_language.lower() == "korean" else None
+            doc = markdown_to_docx(report, full_name, selected_language, corp_code_data)
 
             # Save to bytes
             doc_buffer = io.BytesIO()
@@ -313,7 +381,7 @@ async def generate_report_flow(company_url_input, selected_language):
         # Step 1: Generate company information
         with st.spinner("🔍 Analyzing company information..."):
             company_data = await generate_company_information(company_url_input, selected_language)
-            report=company_data
+            report = company_data
             report_data['company_data'] = report
 
         if not company_data or "error" in company_data:
@@ -353,7 +421,7 @@ async def generate_report_flow(company_url_input, selected_language):
         # Query template
         query_template = f"""As an investment associate, draft an information memorandum for company: {full_name}
         Information of Company: {company_data}
-        
+
         ADD These in table of contents:
 
         These are the Headings you need to use for IM and then generate sub headings for each heading
@@ -458,11 +526,17 @@ async def generate_report_flow(company_url_input, selected_language):
                         st.write(corp_short_list_data)
 
                     with st.spinner("🔢 Generating DART corporation code..."):
-                        corp_code_data = await generate_corp_code(full_name, corp_short_list_data,company_url_input)
-                        report_data['corp_code_data'] = corp_code_data
-
-                    with st.expander("View Corp Code", expanded=False):
+                        corp_code_data = await generate_corp_code(full_name, corp_short_list_data, company_url_input)
                         st.write(corp_code_data)
+                        if corp_code_data:
+                            corp_code_data=corp_short_list_data[int(corp_code_data)]
+                            report_data['corp_code_data'] = corp_code_data
+    
+                            with st.expander("View Company Information", expanded=False):
+                                st.write(corp_code_data)
+        
+                            with st.expander("View Corp Code", expanded=False):
+                                st.write(corp_code_data['corp_code'])
 
                     if not corp_code_data or "error" in corp_code_data or corp_code_data.get('corp_code') == 'N/A':
                         st.info("ℹ️ Could not found company data in Dart Using web search instead.")
@@ -473,7 +547,7 @@ async def generate_report_flow(company_url_input, selected_language):
                     else:
                         st.success("✅ DART Corporation code generated.")
                         # with st.expander("View Corporation Code", expanded=False):
-                        #     st.json(corp_code_data)
+                        #     st.write(corp_code_data)
                         corp_code_value = corp_code_data['corp_code']
 
                         # Show the complete metrics including corp code only once here
@@ -621,5 +695,4 @@ st.markdown(
         <p>IM Report Generator | Powered by doAZ</p>
     </div>
     """,
-    unsafe_allow_html=True
-)
+    unsafe_allow_html=True)
