@@ -718,7 +718,8 @@ def main():
     init_session_state()
 
     # Render sidebar navigation first
-    render_sidebar_navigation()
+    # render_sidebar_navigation()
+    st.session_state.current_page = PAGE_REPORT_GENERATOR
 
     # Determine which page to display based on session state
     if st.session_state.current_page == PAGE_REPORT_GENERATOR:
