@@ -474,7 +474,7 @@ async def generate_report_flow(company_url_input, selected_language):
                         st.success("✅ DART Corporation code generated.")
                         # with st.expander("View Corporation Code", expanded=False):
                         #     st.json(corp_code_data)
-                        # corp_code_value = corp_code_data['corp_code']
+                        corp_code_value = corp_code_data['corp_code']
 
                         # Show the complete metrics including corp code only once here
                         st.markdown("### 📊 Company Metrics")
