@@ -92,10 +92,11 @@ DART_API_KEY = os.getenv("DART_API_KEY")
 #                     self.logs_container.warning(error_message)
 
 
-async def tavily_web_search(query, num_results=5):
+async def tavily_web_search(url, num_results=5):
     """Perform a web search using Tavily API and return relevant information asynchronously."""
     client = AsyncTavilyClient(api_key=TAVILY_API_KEY)
-    search_query = "Information about " + query + " and Top competitors of " + query
+    search_query = "Information about " + url + " and Top competitors of " + url + "with its Ticker"
+    response = client.extract(urls=url)
     search_response = await client.search(
         query=search_query,
         search_depth="advanced",
@@ -108,6 +109,11 @@ async def tavily_web_search(query, num_results=5):
     )
 
     search_results = []
+    if "results" in response:
+        for result in response["results"]:
+            search_results.append({
+                "Company_Information": result.get("raw_content","No description found")
+            })
     if "results" in search_response:
         for result in search_response["results"]:
             search_results.append({
