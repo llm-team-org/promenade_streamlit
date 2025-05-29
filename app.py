@@ -17,6 +17,9 @@ from load_files import process_files_and_get_chat_object
 from dotenv import load_dotenv
 load_dotenv()
 from sec_agent import run_agent
+from sec_tool import sec_tool_function
+from web_search import web_search_tool
+from combined_tool import get_answer_to_query
 # Apply nest_asyncio to handle asyncio in Streamlit
 nest_asyncio.apply()
 
@@ -25,6 +28,7 @@ PAGE_REPORT_GENERATOR = "Report Generator"
 PAGE_SEC_CHAT = "SEC Agent Chat"
 PAGE_DART_CHAT = "DART Filings Agent Chat"
 PAGE_DOCUMENT_CHAT = "Chat with Document" # Renamed from PAGE_PDF_CHAT
+PAGE_COMBINED_CHAT = "Chat With Tools"
 
 # --- Page Configuration and Session State Initialization ---
 
@@ -45,7 +49,7 @@ def init_session_state():
     if 'current_page' not in st.session_state:
         st.session_state.current_page = PAGE_REPORT_GENERATOR
     if 'uploaded_files' not in st.session_state: # Renamed from uploaded_pdfs
-        st.session_state.uploaded_files = []
+        st.session_state.uploaded_files = [{"name": "Web Search Tool", "path": "", "id": "Web Search Tool", 'tools_list': [web_search_tool]}, {"name":"SEC Filings Search Tool", "path":"", "id":"SEC Filings Search Tool", "tools_list":[sec_tool_function]}]
     if 'selected_file_for_chat' not in st.session_state: # Renamed from selected_pdf_for_chat
         st.session_state.selected_file_for_chat = None
     if 'last_filings_selection' not in st.session_state:
@@ -58,6 +62,8 @@ def init_session_state():
         st.session_state.chat_histories = {}
     if 'sec_agent_query_answer' not in st.session_state:
         st.session_state.sec_agent_query_answer = []
+    # if 'available_tools' not in st.session_state:
+        # st.session_state.available_tools = {"Web Search Tool":web_search_tool, "SEC Filings Search Tool": sec_tool_function}
 
 # --- Helper Functions for UI and State Management ---
 
@@ -223,9 +229,9 @@ def process_uploaded_file(uploaded_file):
             file_path = tmp_file.name
             # Assuming process_files_and_get_chat_object initializes a chat session
             # and that st.session_state.google_client is the correct client object.
-            chat_object = process_files_and_get_chat_object(file_path_list=[file_path], client=st.session_state.google_client)
+            tools_list = process_files_and_get_chat_object(file_path_list=[file_path], client=st.session_state.google_client)
         st.success(f"Document '{uploaded_file.name}' processed and ready for chat.")
-        return {"name": uploaded_file.name, "path": file_path, "id": os.path.basename(file_path), 'chat_obj': chat_object}
+        return {"name": uploaded_file.name, "path": file_path, "id": os.path.basename(file_path), 'tools_list': tools_list}
     return None
 
 def query_document_chat(processed_file_info, user_query):
@@ -233,10 +239,10 @@ def query_document_chat(processed_file_info, user_query):
     Handles querying the processed document file with the user's input using the chat object.
     Displays tool call queries and results if present.
     """
-    if not processed_file_info or not processed_file_info.get('chat_obj'):
+    if not processed_file_info or not processed_file_info.get('tools_list'):
         return "Please select a document file to chat with."
 
-    chat_obj = processed_file_info['chat_obj']
+    chat_obj = processed_file_info['tools_list']
     response_content = []
     tool_interactions = []
 
@@ -279,12 +285,14 @@ def render_sidebar_navigation():
     st.sidebar.header("Navigation")
     if st.sidebar.button("📊 Report Generator", key="nav_report_gen"):
         navigate_to(PAGE_REPORT_GENERATOR)
-    if st.sidebar.button("🤖 SEC Agent Chat", key="nav_sec_chat"):
-        navigate_to(PAGE_SEC_CHAT)
+    if st.sidebar.button("🛠️ Chat with Tools",key="nav_chat_tools"):
+        navigate_to(PAGE_COMBINED_CHAT)
+    # if st.sidebar.button("🤖 SEC Agent Chat", key="nav_sec_chat"):
+    #     navigate_to(PAGE_SEC_CHAT)
     # if st.sidebar.button("🇰🇷 DART Filings Agent Chat", key="nav_dart_chat"):
     #     navigate_to(PAGE_DART_CHAT)
-    if st.sidebar.button("📄 Chat with DOCUMENT", key="nav_document_chat"):
-        navigate_to(PAGE_DOCUMENT_CHAT)
+    # if st.sidebar.button("📄 Chat with DOCUMENT", key="nav_document_chat"):
+    #     navigate_to(PAGE_DOCUMENT_CHAT)
 
 def render_report_generator_page():
     """Renders the main Report Generator page content."""
@@ -416,6 +424,58 @@ def sec_agent_chat_page():
             st.session_state.sec_agent_query_answer.append(new_query_answer)
             st.rerun()
 
+def combined_tools_chat_page():
+    st.markdown("Upload a document and chat with its content.")
+
+    # Document Upload Section
+    st.subheader("Upload Document")
+    uploaded_file = st.file_uploader(
+        "Choose a file",
+        type=["pdf", "txt", "csv", "docx", "xlsx"],
+        key="file_uploader"
+    )
+    if uploaded_file:
+        existing_file_names = [file['name'] for file in st.session_state.uploaded_files]
+        if uploaded_file.name not in existing_file_names:
+            with st.spinner(f"Processing {uploaded_file.name}..."):
+                processed_info = process_uploaded_file(uploaded_file)
+                if processed_info:
+                    st.session_state.uploaded_files.append(processed_info)
+                    st.session_state.selected_file_for_chat = processed_info
+                    # Initialize chat history for this new document
+                    st.session_state.chat_histories[processed_info['id']] = []
+                else:
+                    st.error("Failed to process document.")
+        else:
+            st.info(f"Document '{uploaded_file.name}' is already uploaded and processed.")
+            st.session_state.selected_file_for_chat = next(
+                (f for f in st.session_state.uploaded_files if f['name'] == uploaded_file.name), None
+            )
+
+    selected_tools = st.multiselect("Select the tools you want to use", options=[file['name'] for file in st.session_state.uploaded_files])
+
+    for query_answer in st.session_state.sec_agent_query_answer:
+        with st.container(border=True):
+            with st.chat_message('user'):
+                st.write(query_answer['query'])
+            with st.chat_message('assistant'):
+                st.write(query_answer['answer'])
+    
+    user_query = st.chat_input("Ask me any query regarding SEC filings:")
+    if user_query:
+        with st.container(border=True):
+            with st.chat_message("user"):
+                st.write(user_query)
+            with st.spinner("Getting answer from SEC Agent"):
+                tools_list_to_send = [file['tools_list'] for file in st.session_state.uploaded_files if file['name'] in selected_tools]
+                answer = get_answer_to_query(user_query, tools_list_to_send)
+            if not answer:
+                answer = "Failed to get answer from agent"
+            new_query_answer = {'query':user_query, 'answer':answer}
+            st.session_state.sec_agent_query_answer.append(new_query_answer)
+            st.rerun()
+
+
 def dart_agent_chat_page():
     """Renders the DART Filings Agent Chat page."""
     st.title("🇰🇷 DART Filings Agent Chat")
@@ -465,16 +525,16 @@ def document_chat_page():
     st.subheader("Select Document to Chat With")
     if st.session_state.uploaded_files:
         file_names = [file['name'] for file in st.session_state.uploaded_files]
-        selected_name = st.selectbox(
+        selected_name = st.multiselect(
             "Choose a processed document:",
-            options=["-- Select a Document --"] + file_names,
-            index=0 if not st.session_state.selected_file_for_chat else
-                  (file_names.index(st.session_state.selected_file_for_chat['name']) + 1 if st.session_state.selected_file_for_chat['name'] in file_names else 0),
+            options= file_names,
+            # index=0 if not st.session_state.selected_file_for_chat else
+                #   (file_names.index(st.session_state.selected_file_for_chat['name']) + 1 if st.session_state.selected_file_for_chat['name'] in file_names else 0),
             key="file_selector"
         )
 
         # Update selected_file_for_chat based on dropdown selection
-        if selected_name != "-- Select a Document --":
+        if selected_name:
             newly_selected_file = next(
                 (file for file in st.session_state.uploaded_files if file['name'] == selected_name), None
             )
@@ -718,8 +778,8 @@ def main():
     init_session_state()
 
     # Render sidebar navigation first
-    # render_sidebar_navigation()
-    st.session_state.current_page = PAGE_REPORT_GENERATOR
+    render_sidebar_navigation()
+    # st.session_state.current_page = PAGE_REPORT_GENERATOR
 
     # Determine which page to display based on session state
     if st.session_state.current_page == PAGE_REPORT_GENERATOR:
@@ -730,6 +790,8 @@ def main():
         dart_agent_chat_page()
     elif st.session_state.current_page == PAGE_DOCUMENT_CHAT:
         document_chat_page()
+    elif st.session_state.current_page == PAGE_COMBINED_CHAT:
+        combined_tools_chat_page()
 
     # Footer always at the bottom
     # st.markdown("---")
