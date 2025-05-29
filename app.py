@@ -16,8 +16,6 @@ from google.genai import Client # Assuming this is the correct client for chat_o
 from load_files import process_files_and_get_chat_object
 from dotenv import load_dotenv
 load_dotenv()
-import logging
-logging.info("OPENAI_KEY"+str(os.getenv("OPENAI_API_KEY")))
 from sec_agent import run_agent
 # Apply nest_asyncio to handle asyncio in Streamlit
 nest_asyncio.apply()
