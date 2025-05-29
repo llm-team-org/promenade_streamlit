@@ -6,7 +6,8 @@ from prom_functions import (
     sec_search,
     sec_get_report,
     dart_search,
-    dart_get_report
+    dart_get_report,
+    get_dart_company_information
 )
 import asyncio
 import os
@@ -352,6 +353,7 @@ async def generate_report_flow(company_url_input, selected_language):
         # Query template
         query_template = f"""As an investment associate, draft an information memorandum for company: {full_name}
         Information of Company: {company_data}
+        
         ADD These in table of contents:
 
         These are the Headings you need to use for IM and then generate sub headings for each heading
@@ -367,7 +369,7 @@ async def generate_report_flow(company_url_input, selected_language):
         7.Financial Performance Analysis
         8.Management and Corporate Governance
         9.Strategic Initiatives and Future Growth Drivers
-        10.Risk Factors
+        10.Risk Factors (Please exclude SWOT analysis (SWOT analysis is outdated))
         11.Investment Considerations
         12.Conclusion
         13.References
@@ -429,7 +431,9 @@ async def generate_report_flow(company_url_input, selected_language):
             try:
                 with st.spinner("📝 Generating company short list for DART..."):
                     company_first_name_for_dart = first_name if first_name != 'N/A' else full_name.split(" ")[0]
-                    corp_short_list_data = await short_list(full_name, company_first_name_for_dart)
+                    corp_short_list_data = await get_dart_company_information(full_name, company_first_name_for_dart)
+                    # if corp_short_list_data == None:
+                    #     corp_short_list_data = await short_list(full_name, company_first_name_for_dart)
                     report_data['corp_short_list_data'] = corp_short_list_data
 
                 use_web_search = False
@@ -454,8 +458,11 @@ async def generate_report_flow(company_url_input, selected_language):
                         st.write(corp_short_list_data)
 
                     with st.spinner("🔢 Generating DART corporation code..."):
-                        corp_code_data = await generate_corp_code(full_name, corp_short_list_data)
+                        corp_code_data = await generate_corp_code(full_name, corp_short_list_data,company_url_input)
                         report_data['corp_code_data'] = corp_code_data
+
+                    with st.expander("View Corp Code", expanded=False):
+                        st.write(corp_code_data)
 
                     if not corp_code_data or "error" in corp_code_data or corp_code_data.get('corp_code') == 'N/A':
                         st.info("ℹ️ Could not found company data in Dart Using web search instead.")
@@ -465,9 +472,9 @@ async def generate_report_flow(company_url_input, selected_language):
                         web_search_reason = "corp code generation failed"
                     else:
                         st.success("✅ DART Corporation code generated.")
-                        with st.expander("View Corporation Code", expanded=False):
-                            st.json(corp_code_data)
-                        corp_code_value = corp_code_data['corp_code']
+                        # with st.expander("View Corporation Code", expanded=False):
+                        #     st.json(corp_code_data)
+                        # corp_code_value = corp_code_data['corp_code']
 
                         # Show the complete metrics including corp code only once here
                         st.markdown("### 📊 Company Metrics")
@@ -488,7 +495,7 @@ async def generate_report_flow(company_url_input, selected_language):
                         with st.spinner("📊 Generating IM report using web search..."):
                             report, images, logs = await dart_get_report(
                                 query=query_template,
-                                report_source="web",
+                                report_source=report_source,
                                 path=None
                             )
                         report_data['report'] = report
@@ -611,7 +618,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center'>
-        <p>IM Report Generator</p>
+        <p>IM Report Generator | Powered by doAZ</p>
     </div>
     """,
     unsafe_allow_html=True
