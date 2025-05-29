@@ -538,7 +538,7 @@ async def generate_report_flow(company_url_input, selected_language):
                             with st.expander("View Corp Code", expanded=False):
                                 st.write(corp_code_data['corp_code'])
 
-                    if not corp_code_data or "error" in corp_code_data or corp_code_data.get('corp_code') == 'N/A':
+                    if not corp_code_data or "error" in corp_code_data or corp_code_data == 'N/A':
                         st.info("ℹ️ Could not found company data in Dart Using web search instead.")
                         if "raw_content" in corp_code_data:
                             st.expander("Raw LLM Output").write(corp_code_data["raw_content"])
