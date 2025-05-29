@@ -16,7 +16,7 @@ import tavily # Import tavily
 load_dotenv()
 
 # --- Logging Setup ---
-logging.basicConfig(filename='app.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- Dependencies ---
 @dataclass
