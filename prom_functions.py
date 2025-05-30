@@ -430,14 +430,15 @@ async def sec_get_report(query: str, report_type: str, sources: list) -> tuple[s
     # COMMENTED OUT: StreamlitLogHandler for streaming logs
     # logs_handler = StreamlitLogHandler(logs_container, report_container)
 
+    query= "Use the source_urls in references as well with other references" + query
     # MODIFIED: Removed websocket parameter (streaming handler)
     researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
                                config_path="config.json")
-
+    researcher.cfg.load_config("config.json")
     # COMMENTED OUT: Report container info messages
     # report_container.info("Starting research... This may take a few minutes. ⏳")
 
-    researcher.cfg.load_config("config.json")  # Or path to your config file
+    #configuration=researcher.cfg.load_config("config.json")  # Or path to your config file
     # configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
     # configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
     # configuration['STRATEGIC_LLM'] = os.getenv("STRATEGIC_LLM", "anthropic:claude-3-5-haiku-latest")
@@ -450,7 +451,7 @@ async def sec_get_report(query: str, report_type: str, sources: list) -> tuple[s
     # Set any other necessary configurations if GPTResearcher needs them
     # e.g. researcher.cfg.set_openai_api_key(OPENAI_API_KEY) if not picked up from env by GPTResearcher
 
-    # researcher.cfg._set_attributes(configuration)
+    #researcher.cfg._set_attributes(configuration)
 
     # COMMENTED OUT: Report container info messages
     # report_container.info("Starting research... This may take a few minutes. ⏳")
@@ -514,11 +515,17 @@ async def dart_search(corp_code, temp_dir):
 
 
 # MODIFIED: Removed streaming containers from function signature
-async def dart_get_report(query: str, report_source: str, path: str) -> tuple[str, list]:
+async def dart_get_report(query: str, corp_data, path: str) -> tuple[str, list]:
     """Generate DART report using GPTResearcher asynchronously."""
     # if not path: # Handle case where dart_search might have returned None
     #     return "Error: Document path not available for DART report generation.", [], ""
-
+    query= f"""
+            Use this tone for report generation : Simple/Factual tone: 이 보고서는 회사의 중요한 정보를 포함함
+            {query}
+            
+            For the first page of report add Table with this data {corp_data} and also add field of Capital stock and Total revenue put the value of these their after you generate the report and have their value
+            if you dont have any value for them then write "N/A" in table.
+            """
     if path:
         os.environ['DOC_PATH'] = path  # GPTResearcher might pick this up
         researcher = GPTResearcher(query=query, report_type="research_report", report_source="hybrid",
