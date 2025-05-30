@@ -454,7 +454,7 @@ async def generate_report_flow(company_url_input, selected_language):
         query_template = f"""As an investment associate, draft an information memorandum for company: {full_name}
         Information of Company: {company_data}
 
-        ADD These in table of contents:
+        -ADD These in table of contents:
 
         These are the Headings you need to use for IM and then generate sub headings for each heading
         1.Executive Summary
@@ -466,13 +466,17 @@ async def generate_report_flow(company_url_input, selected_language):
         4.Business Model, Strategy, and Product
         5.Business Segments Deep Dive
         6.Industry Overview and Competitive Positioning
-        7.Financial Performance Analysis
+        7.Financial Performance Analysis 
         8.Management and Corporate Governance
-        9.Strategic Initiatives and Future Growth Drivers
-        10.Risk Factors (Please exclude SWOT analysis (SWOT analysis is outdated))
+        9.Strategic Initiatives and Future Growth Drivers 
+        10.Risk Factors 
         11.Investment Considerations
         12.Conclusion
         13.References
+        
+        -Add Tables: Display structured data like numbers, dates, comparisons, or lists in a table with headers, then summarize its main takeaways. For other content, use bullet points or numbered lists.
+
+        -(Please exclude SWOT analysis)
         """
         st.markdown("---")
         report = ""
@@ -601,7 +605,7 @@ async def generate_report_flow(company_url_input, selected_language):
                         with st.spinner("📊 Generating IM report using web search..."):
                             report, images, logs = await dart_get_report(
                                 query=query_template,
-                                report_source=report_source,
+                                corp_data=corp_code_data,
                                 path=None
                             )
                         report_data['report'] = report
