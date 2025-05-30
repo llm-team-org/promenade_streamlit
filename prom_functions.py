@@ -176,7 +176,7 @@ async def generate_company_information(url, language):
 
     # Initial call to determine if a tool (web search) is needed
     response = await client.chat.completions.create(
-        model="gpt-4.1-nano",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Give me information about this company {url}"}
@@ -237,7 +237,7 @@ async def generate_company_information(url, language):
 
         # Send the full history including tool responses back to the model
         followup = await client.chat.completions.create(
-            model="gpt-4.1-nano",
+            model="gpt-4o",
             messages=messages_history,  # Use the constructed history
             temperature=0.4,
             response_format={"type": "json_object"}
@@ -514,8 +514,46 @@ async def dart_search(corp_code, temp_dir):
     return folder_name
 
 
+table_format="""
+| **Business #**         | {BusinessNumber}            | **Corp Registration #**  | {CorpRegistrationNumber}      |
+|-----------------------|-----------------------------|--------------------------|------------------------------|
+| **CEO Name**           | {CEOName}                   | **Incorporation Date**    | {IncorporationDate}           |
+| **Capital Stock**      | {CapitalStock}              | **# of Employees**        | {NumberOfEmployees}           |
+| **Major Shareholders** | {MajorShareholders}         | **Company Type**          | {CompanyType}                 |
+| **Financial Audit**    | {FinancialAudit}            |                          |                              |
+| **Line of Business**   | {LineOfBusiness}            |                          |                              |
+| **Address**            | {Address}                   |                          |                              |
+| **Year** | **Corporate History Details**          |
+|----------|--------------------------------------|
+| 2025     | {History_2025}                       |
+| 2023     | {History_2023}                       |
+| 2021     | {History_2021}                       |
+| 2017     | {History_2017}                       |
+| 2010     | {History_2010}                       |
+| 2000     | {History_2000}                       |
+| 1993     | {History_1993}                       |
+| 1980s    | {History_1980s}                      |
+| 1970     | {History_1970}                       |
+| 1969     | {History_1969}                       |
+"""
+table_data="""
+
+Business # : ""
+CEO NAME : ""
+CAPITAL STOCK : ""
+MAJOR SHAREHOLDERS : ""
+FINANCIAL AUDIT : ""
+LINE OF BUSINESS : ""
+ADDRESS : ""
+CORPORATE HISTORY : ""
+CORP CODE : ""
+INCORPORATION DATE : ""
+NUMBER OF EMPLOYEES : ""
+COMPANY TYPE : ""
+
+"""
 # MODIFIED: Removed streaming containers from function signature
-async def dart_get_report(query: str, report_source:str, path: str,corp_data) -> tuple[str, list]:
+async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str, list]:
     """Generate DART report using GPTResearcher asynchronously."""
     # if not path: # Handle case where dart_search might have returned None
     #     return "Error: Document path not available for DART report generation.", [], ""
@@ -523,8 +561,11 @@ async def dart_get_report(query: str, report_source:str, path: str,corp_data) ->
             Use this tone for report generation : Simple/Factual tone: 이 보고서는 회사의 중요한 정보를 포함함
             {query}
             
-            For the first page of report add Table with this data {corp_data} and also add field of Capital stock and Total revenue put the value of these their after you generate the report and have their value
+            For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value
+            Table format should be like this: {table_format}
             if you dont have any value for them then write "N/A" in table.
+            
+            Generate in English language
             """
     if path:
         os.environ['DOC_PATH'] = path  # GPTResearcher might pick this up
