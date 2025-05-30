@@ -24,77 +24,79 @@ SEC_API_KEY = os.getenv("SEC_API_KEY")
 DART_API_KEY = os.getenv("DART_API_KEY")
 
 
-class StreamlitLogHandler:
-    """
-    A custom logs handler for GPTResearcher that streams logs to a
-    Streamlit container.
-    """
+# COMMENTED OUT: StreamlitLogHandler class for streaming logs
+# class StreamlitLogHandler:
+#     """
+#     A custom logs handler for GPTResearcher that streams logs to a
+#     Streamlit container.
+#     """
 
-    def __init__(self, logs_container, report_container):
-        """
-        Initializes the handler with a Streamlit container.
+#     def __init__(self, logs_container, report_container):
+#         """
+#         Initializes the handler with a Streamlit container.
 
-        Args:
-            container: A Streamlit container (e.g., returned by st.empty()).
-        """
-        self.logs_container = logs_container
-        self.report_container = report_container
-        self.logs = ""
-        self.report_content = ""
-        self.lock = asyncio.Lock()  # To handle async updates safely
+#         Args:
+#             container: A Streamlit container (e.g., returned by st.empty()).
+#         """
+#         self.logs_container = logs_container
+#         self.report_container = report_container
+#         self.logs = ""
+#         self.report_content = ""
+#         self.lock = asyncio.Lock()  # To handle async updates safely
 
-    async def send_json(self, data: Dict[str, Any]) -> None:
-        """
-        Receives JSON data from GPTResearcher and displays it in Streamlit.
-        This method is called by GPTResearcher during its process.
-        """
-        async with self.lock:
-            if data['type'] == 'report':
-                try:
-                    # Extract a meaningful message or format the JSON
-                    if 'message' in data:
-                        message = data['message']
-                    elif 'output' in data:
-                        message = data['output']
-                    else:
-                        # Default to a formatted JSON string
-                        message = f"```json\n{json.dumps(data, indent=2)}\n```"
+#     async def send_json(self, data: Dict[str, Any]) -> None:
+#         """
+#         Receives JSON data from GPTResearcher and displays it in Streamlit.
+#         This method is called by GPTResearcher during its process.
+#         """
+#         async with self.lock:
+#             if data['type'] == 'report':
+#                 try:
+#                     # Extract a meaningful message or format the JSON
+#                     if 'message' in data:
+#                         message = data['message']
+#                     elif 'output' in data:
+#                         message = data['output']
+#                     else:
+#                         # Default to a formatted JSON string
+#                         message = f"```json\n{json.dumps(data, indent=2)}\n```"
 
-                    # Append new log and update the container
-                    self.report_content += message + "\n\n"
-                    self.report_container.markdown(self.report_content)
+#                     # Append new log and update the container
+#                     self.report_content += message + "\n\n"
+#                     self.report_container.markdown(self.report_content)
 
-                except Exception as e:
-                    # Fallback for any processing errors
-                    error_message = f"Error processing log: {e}\n{str(data)}\n\n"
-                    self.report_content += error_message
-                    self.report_container.warning(error_message)
-            else:
-                try:
-                    # Extract a meaningful message or format the JSON
-                    if 'message' in data:
-                        message = data['message']
-                    elif 'output' in data:
-                        message = data['output']
-                    else:
-                        # Default to a formatted JSON string
-                        message = f"```json\n{json.dumps(data, indent=2)}\n```"
+#                 except Exception as e:
+#                     # Fallback for any processing errors
+#                     error_message = f"Error processing log: {e}\n{str(data)}\n\n"
+#                     self.report_content += error_message
+#                     self.report_container.warning(error_message)
+#             else:
+#                 try:
+#                     # Extract a meaningful message or format the JSON
+#                     if 'message' in data:
+#                         message = data['message']
+#                     elif 'output' in data:
+#                         message = data['output']
+#                     else:
+#                         # Default to a formatted JSON string
+#                         message = f"```json\n{json.dumps(data, indent=2)}\n```"
 
-                    # Append new log and update the container
-                    self.logs += message + "\n\n"
-                    self.logs_container.markdown(self.logs)
+#                     # Append new log and update the container
+#                     self.logs += message + "\n\n"
+#                     self.logs_container.markdown(self.logs)
 
-                except Exception as e:
-                    # Fallback for any processing errors
-                    error_message = f"Error processing log: {e}\n{str(data)}\n\n"
-                    self.logs += error_message
-                    self.logs_container.warning(error_message)
+#                 except Exception as e:
+#                     # Fallback for any processing errors
+#                     error_message = f"Error processing log: {e}\n{str(data)}\n\n"
+#                     self.logs += error_message
+#                     self.logs_container.warning(error_message)
 
 
-async def tavily_web_search(query, num_results=5):
+async def tavily_web_search(url, num_results=5):
     """Perform a web search using Tavily API and return relevant information asynchronously."""
     client = AsyncTavilyClient(api_key=TAVILY_API_KEY)
-    search_query = "Information about " + query + " and Top competitors of " + query
+    search_query = "Information about " + url + " and Top competitors of " + url + "with its Ticker"
+    response = client.extract(urls=url)
     search_response = await client.search(
         query=search_query,
         search_depth="advanced",
@@ -107,6 +109,11 @@ async def tavily_web_search(query, num_results=5):
     )
 
     search_results = []
+    if "results" in response:
+        for result in response["results"]:
+            search_results.append({
+                "Company_Information": result.get("raw_content","No description found")
+            })
     if "results" in search_response:
         for result in search_response["results"]:
             search_results.append({
@@ -149,17 +156,16 @@ async def generate_company_information(url, language):
 
     Generate these for each user query.
 
-    1. Company Name. (Get company name from its url.
+    1. Company Name.
     2. Name of Company's Industry.
     3. Carefully understand the industry of company and name Top 5 related industry competitors of Company.
     4. Generate all information 'company_name','description', 'company_first_name', "ticker", 'industry' and 'competitors'.
     5. Generate all information only in {language} language. Even if company name is in any translate it to {language} and give {language} name.
-
-    Return a JSON object where keys are slide numbers (1-based) and values are the content.
+    
     Please respond ONLY with a JSON object in the following format (nothing else):
     {{
-        "company_name": "Full company name",
-        "company_first_name": "Only first name of company",
+        "company_name": "Full Name of company",
+        "company_first_name": "Only first name or first half of company",
         "ticker" : "Ticker of company",
         "description": "Company description",
         "industry": "Primary industry or sector",
@@ -170,7 +176,7 @@ async def generate_company_information(url, language):
 
     # Initial call to determine if a tool (web search) is needed
     response = await client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Give me information about this company {url}"}
@@ -231,7 +237,7 @@ async def generate_company_information(url, language):
 
         # Send the full history including tool responses back to the model
         followup = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=messages_history,  # Use the constructed history
             temperature=0.4,
             response_format={"type": "json_object"}
@@ -256,37 +262,70 @@ async def generate_company_information(url, language):
     return {"error": "No content or tool call from LLM."}
 
 
-async def generate_corp_code(company_name, short_list_data):
+async def get_dart_company_information(company_name, first_name):
+    corp_list = dart.get_corp_list()
+    corp = None
+
+    # First try with full company name
+    try:
+        corp = corp_list.find_by_corp_name(company_name, exactly=True, market='YKNE')
+        if not corp:
+            corp = corp_list.find_by_corp_name(company_name, exactly=False, market='YKNE')
+    except:
+        pass
+
+    # If not found, try with first name
+    if not corp:
+        try:
+            corp = corp_list.find_by_corp_name(first_name, exactly=True, market='YKNE')
+            if not corp:
+                corp = corp_list.find_by_corp_name(first_name, exactly=False, market='YKNE')
+        except:
+            pass
+
+    # If still not found, return None
+    if not corp:
+        return "This company is not in the dart list"
+
+    corp_data = []
+    for info in corp:
+        corp_code = info.corp_code
+        corp_info = dart.api.filings.get_corp_info(corp_code=corp_code)
+        corp_data.append(corp_info)
+
+    return corp_data
+
+
+async def generate_corp_code(company_name, short_list_data,url):
     """Generate corporation code asynchronously."""
     # Ensure short_list_data is stringified if it's complex for the prompt
     short_list_str = json.dumps(short_list_data) if not isinstance(short_list_data, str) else short_list_data
 
     system_prompt = f"""
-    You will get a corporation name. Your job is to get corporation code.
-
-    This is company name : '{company_name}'
-    This is the list of potential corp_code information : '{short_list_str}'
-    Generate these for each user query.
-
-    Carefully choose the correct 8-digit corp_code by matching the company name with the provided list.
-    If you cannot find a relevant code, return "N/A" for the corp_code value.
-
-    Respond ONLY with a JSON object in the following format (nothing else):
-    {{
-        "corp_code": "8_digit_code_or_NA"
-    }}
+    1. You are given:
+    - A target company name: '{company_name}'
+    - A target company website URL: '{url}'
+    - A list of potential corporations with information: '{short_list_str}'
+    
+    2. In the list of potential corporations with information you would file 'hm_url' Homepage_url in each list index.
+    3. Compare the 'hm_url' for all list with the company website URL : '{url}' and whichever list index hm_url is exactly same or similar with website URL {url}. Give me that list index. 
+    4. If no relevant 'hm_url' or Corporation found in the list return "N/A".
+    
+    Return only the index of list like 0,1,2 which matches the best. Nothing else just the index.
     """
+
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
     response = await client.chat.completions.create(
-        model="gpt-4o-mini",  # Changed from gpt-4.1-nano for consistency, assuming it's a better/standard choice
+        model="gpt-4.1-nano",
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Give me the corporation code for {company_name} based on the provided list."}
+            {"role": "user", "content": f"Give me the List index for {company_name} based on the provided list."}
         ],
-        response_format={"type": "json_object"}
+        #response_format={"type": "json_object"}
     )
     try:
-        return json.loads(response.choices[0].message.content)
+        #return json.loads(response.choices[0].message.content)
+        return response.choices[0].message.content
     except json.JSONDecodeError:
         return {"corp_code": "N/A", "error": "Failed to parse JSON from LLM for corp_code."}
 
@@ -369,11 +408,14 @@ async def short_list(company_name, company_first_name):
     return short_lists
 
 
-async def sec_search(company_name):
+async def sec_search(company_name,ticker):
     """Asynchronously search SEC filings."""
+    if ticker == 'N/A':
+        ticker="corporation"
+
     fullTextSearchApi = FullTextSearchApi(api_key=SEC_API_KEY)
     query = {
-        "query": f"Get Financial Annual report of {company_name} Corporation",
+        "query": f"{company_name} {ticker}",
         "formTypes": ['10-K'],
         "startDate": '2020-01-01',
     }
@@ -382,15 +424,21 @@ async def sec_search(company_name):
     return filings
 
 
-async def sec_get_report(query: str, report_type: str, sources: list, logs_container, report_container) -> tuple[
-    str, list]:
+# MODIFIED: Removed streaming containers from function signature
+async def sec_get_report(query: str, report_type: str, sources: list) -> tuple[str, list]:
     """Generate SEC report using GPTResearcher asynchronously."""
-    logs_handler = StreamlitLogHandler(logs_container, report_container)
-    researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
-                               websocket=logs_handler)
+    # COMMENTED OUT: StreamlitLogHandler for streaming logs
+    # logs_handler = StreamlitLogHandler(logs_container, report_container)
 
-    report_container.info("Starting research... This may take a few minutes. ⏳")
-    configuration = json.load(open("config.json","r"))  # Or path to your config file
+    query= "Use the source_urls in references as well with other references" + query
+    # MODIFIED: Removed websocket parameter (streaming handler)
+    researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
+                               config_path="config.json")
+    researcher.cfg.load_config("config.json")
+    # COMMENTED OUT: Report container info messages
+    # report_container.info("Starting research... This may take a few minutes. ⏳")
+
+    #configuration=researcher.cfg.load_config("config.json")  # Or path to your config file
     # configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
     # configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
     # configuration['STRATEGIC_LLM'] = os.getenv("STRATEGIC_LLM", "anthropic:claude-3-5-haiku-latest")
@@ -403,16 +451,19 @@ async def sec_get_report(query: str, report_type: str, sources: list, logs_conta
     # Set any other necessary configurations if GPTResearcher needs them
     # e.g. researcher.cfg.set_openai_api_key(OPENAI_API_KEY) if not picked up from env by GPTResearcher
 
-    researcher.cfg._set_attributes(configuration)
+    #researcher.cfg._set_attributes(configuration)
 
-    report_container.info("Starting research... This may take a few minutes. ⏳")
+    # COMMENTED OUT: Report container info messages
+    # report_container.info("Starting research... This may take a few minutes. ⏳")
     await researcher.conduct_research()
-    report_container.info("Writing report... This may take a few minutes. ⏳")
+    # report_container.info("Writing report... This may take a few minutes. ⏳")
     report = await researcher.write_report()
     research_images = []
     # report_container.info("Writing images... This may take a few minutes. ⏳")
     # research_images = researcher.get_research_images()
-    return report, research_images, logs_handler.logs
+
+    # MODIFIED: Return empty string for logs since streaming is disabled
+    return report, research_images, ""
 
 
 def _save_dataframe_to_csv_sync(df, filename):
@@ -463,48 +514,92 @@ async def dart_search(corp_code, temp_dir):
     return folder_name
 
 
-async def dart_get_report(query: str, report_source: str, path: str, logs_container, report_container) -> tuple[
-    str, list]:
+table_format="""
+| **Business #**         | {BusinessNumber}            | **Corp Registration #**  | {CorpRegistrationNumber}      |
+|-----------------------|-----------------------------|--------------------------|------------------------------|
+| **CEO Name**           | {CEOName}                   | **Incorporation Date**    | {IncorporationDate}           |
+| **Capital Stock**      | {CapitalStock}              | **# of Employees**        | {NumberOfEmployees}           |
+| **Major Shareholders** | {MajorShareholders}         | **Company Type**          | {CompanyType}                 |
+| **Financial Audit**    | {FinancialAudit}            |                          |                              |
+| **Line of Business**   | {LineOfBusiness}            |                          |                              |
+| **Address**            | {Address}                   |                          |                              |
+
+
+| **Year** | **Corporate History Details**        |
+|----------|--------------------------------------|
+| 2025     | {History_2025}                       |
+| 2023     | {History_2023}                       |
+| 2021     | {History_2021}                       |
+| 2017     | {History_2017}                       |
+| 2010     | {History_2010}                       |
+| 2000     | {History_2000}                       |
+| 1993     | {History_1993}                       |
+| 1980s    | {History_1980s}                      |
+| 1970     | {History_1970}                       |
+| 1969     | {History_1969}                       |
+"""
+table_data="""
+
+Business # : ""
+CEO NAME : ""
+CAPITAL STOCK : ""
+MAJOR SHAREHOLDERS : ""
+FINANCIAL AUDIT : ""
+LINE OF BUSINESS : ""
+ADDRESS : ""
+CORPORATE HISTORY : ""
+CORP CODE : ""
+INCORPORATION DATE : ""
+NUMBER OF EMPLOYEES : ""
+COMPANY TYPE : ""
+
+"""
+# MODIFIED: Removed streaming containers from function signature
+async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str, list]:
     """Generate DART report using GPTResearcher asynchronously."""
     # if not path: # Handle case where dart_search might have returned None
     #     return "Error: Document path not available for DART report generation.", [], ""
-
+    query= f"""
+            Use this tone for report generation : Simple/Factual tone: 이 보고서는 회사의 중요한 정보를 포함함
+            {query}
+            
+            For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value
+            Table format should be like this: {table_format}
+            if you dont have any value for them then write "N/A" in table.
+            
+            Generate in English language
+            """
     if path:
-        with open('doc_path.txt','w') as f:
-            f.write(path)
         os.environ['DOC_PATH'] = path  # GPTResearcher might pick this up
-    elif path == None:
-        with open('doc_path.txt','w') as f:
-            f.write(f"Path is None\nReport_source is {report_source}")
-        report_source='web'
+        researcher = GPTResearcher(query=query, report_type="research_report", report_source="hybrid",
+                                   config_path="config.json")
+        researcher.cfg.load_config("config.json")  # Or path to your config file
+        await researcher.conduct_research()
+        report = await researcher.write_report()
+        research_images = []
+        return report, research_images, ""
+    else:
+        researcher = GPTResearcher(query=query, report_type="research_report",config_path="config.json")
+        researcher.cfg.load_config("config.json")
+        await researcher.conduct_research()
+        report = await researcher.write_report()
+        research_images = []
+        return report, research_images, ""
 
-    logs_handler = StreamlitLogHandler(logs_container, report_container)
-    researcher = GPTResearcher(query=query, report_type="research_report", report_source=report_source,
-                               websocket=logs_handler)
-    configuration = json.load(open('config_kr.json','r'))
-    researcher.cfg._set_attributes(configuration)
 
-    # Load and override configuration (as in original code)
-    # It's good practice to load config once if possible, or pass config dict
-    report_container.info("Loading configuration...")
-    # configuration = researcher.cfg.load_config("config_kr.json")  # Or path to your config file
-    # configuration['LANGUAGE'] = "korean"
-    # configuration['FAST_LLM'] = os.getenv("FAST_LLM", "anthropic:claude-3-5-haiku-latest")
-    # configuration['SMART_LLM'] = os.getenv("SMART_LLM", "anthropic:claude-3-7-sonnet-latest")
-    # configuration['STRATEGIC_LLM'] = os.getenv("STRATEGIC_LLM", "anthropic:claude-3-5-haiku-latest")
-    # configuration['FAST_TOKEN_LIMIT'] = int(os.getenv("FAST_TOKEN_LIMIT", 15000))
-    # configuration['SMART_TOKEN_LIMIT'] = int(os.getenv("SMART_TOKEN_LIMIT", 15000))
-    # configuration['STRATEGIC_TOKEN_LIMIT'] = int(os.getenv("STRATEGIC_TOKEN_LIMIT", 15000))
-    # configuration['SUMMARY_TOKEN_LIMIT'] = int(os.getenv("SUMMARY_TOKEN_LIMIT", 1200))
-    # configuration['TOTAL_WORDS'] = int(os.getenv("TOTAL_WORDS", 3000))
-    # configuration['MAX_SUBTOPICS'] = int(os.getenv("MAX_SUBTOPICS", 5))
-    # researcher.cfg.set_openai_api_key(OPENAI_API_KEY) # If needed by GPTResearcher
+    # COMMENTED OUT: StreamlitLogHandler for streaming logs
+    # logs_handler = StreamlitLogHandler(logs_container, report_container)
 
-    report_container.info("Starting research... This may take a few minutes. ⏳")
-    await researcher.conduct_research()
-    report_container.info("Writing report... This may take a few minutes. ⏳")
-    report = await researcher.write_report()
-    research_images = []
+    # MODIFIED: Removed websocket parameter (streaming handler)
+
+
+
+    # COMMENTED OUT: Report container info messages
+    # report_container.info("Starting research... This may take a few minutes. ⏳")
+    # report_container.info("Writing report... This may take a few minutes. ⏳")
+
     # report_container.info("Generating report images... This may take a few minutes. ⏳")
     # research_images = researcher.get_research_images()
-    return report, research_images, logs_handler.logs
+
+    # MODIFIED: Return empty string for logs since streaming is disabled
+    # return report, research_images, ""
