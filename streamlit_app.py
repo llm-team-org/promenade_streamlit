@@ -644,7 +644,8 @@ async def generate_report_flow(company_url_input, selected_language):
                                     report, images, logs = await dart_get_report(
                                         query=query_template,
                                         report_source=report_source,
-                                        path=doc_path if report_source == 'hybrid' else None
+                                        path=doc_path if report_source == 'hybrid' else None,
+                                        corp_data=corp_code_data
                                     )
                                 report_data['report'] = report
                                 report_data['images'] = images
