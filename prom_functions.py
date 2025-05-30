@@ -523,7 +523,9 @@ table_format="""
 | **Financial Audit**    | {FinancialAudit}            |                          |                              |
 | **Line of Business**   | {LineOfBusiness}            |                          |                              |
 | **Address**            | {Address}                   |                          |                              |
-| **Year** | **Corporate History Details**          |
+
+
+| **Year** | **Corporate History Details**        |
 |----------|--------------------------------------|
 | 2025     | {History_2025}                       |
 | 2023     | {History_2023}                       |
