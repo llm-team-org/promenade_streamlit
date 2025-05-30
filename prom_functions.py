@@ -156,7 +156,7 @@ async def generate_company_information(url, language):
 
     Generate these for each user query.
 
-    1. Company Name. (Get company name from its url.
+    1. Company Name.
     2. Name of Company's Industry.
     3. Carefully understand the industry of company and name Top 5 related industry competitors of Company.
     4. Generate all information 'company_name','description', 'company_first_name', "ticker", 'industry' and 'competitors'.
@@ -164,8 +164,8 @@ async def generate_company_information(url, language):
     
     Please respond ONLY with a JSON object in the following format (nothing else):
     {{
-        "company_name": "Full company name",
-        "company_first_name": "Only first name of company",
+        "company_name": "Full Name of company",
+        "company_first_name": "Only first name or first half of company",
         "ticker" : "Ticker of company",
         "description": "Company description",
         "industry": "Primary industry or sector",
@@ -302,19 +302,16 @@ async def generate_corp_code(company_name, short_list_data,url):
     short_list_str = json.dumps(short_list_data) if not isinstance(short_list_data, str) else short_list_data
 
     system_prompt = f"""
-    You are given:
+    1. You are given:
     - A target company name: '{company_name}'
     - A target company website URL: '{url}'
     - A list of potential corporations with information: '{short_list_str}'
     
+    2. In the list of potential corporations with information you would file 'hm_url' Homepage_url in each list index.
+    3. Compare the 'hm_url' for all list with the company website URL : '{url}' and whichever list index hm_url is exactly same or similar with website URL {url}. Give me that list index. 
+    4. If no relevant 'hm_url' or Corporation found in the list return "N/A".
     
-    FROM THE GIVEN LIST CHOOSE 1 AND RETURN ME THAT AS IT IS
-    
-    Compare the company name and company website URL with the list of potential corporations with information and return me the one list as it is you get which perfectly matches with the the given company name and url
-    
-    Return only the index of list like 0,1,2 which matches the best. Nothing else just the index
-    
-    If no relevant corporation is found in the list, return "N/A".
+    Return only the index of list like 0,1,2 which matches the best. Nothing else just the index.
     """
 
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
@@ -322,7 +319,7 @@ async def generate_corp_code(company_name, short_list_data,url):
         model="gpt-4.1-nano",
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Give me the corporation code for {company_name} based on the provided list."}
+            {"role": "user", "content": f"Give me the List index for {company_name} based on the provided list."}
         ],
         #response_format={"type": "json_object"}
     )
