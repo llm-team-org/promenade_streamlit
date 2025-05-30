@@ -143,15 +143,26 @@ def add_dart_company_table(doc, corp_code_data):
         'acc_mt': 'Account Month'
     }
 
-    # Add data rows
-    for key, value in corp_code_data.items():
-        if key in field_mappings:  # Only add mapped fields
+    # Check if corp_code is 'N/A' - if so, set all values to 'N/A'
+    if corp_code_data == 'N/A':
+        # Add all field mappings with 'N/A' values
+        for key, field_name in field_mappings.items():
             row_cells = table.add_row().cells
-            row_cells[0].text = field_mappings[key]
-            row_cells[1].text = str(value) if value else 'N/A'
+            row_cells[0].text = field_name
+            row_cells[1].text = 'N/A'
 
             # Center align the first column
             row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+    else:
+        # Add data rows normally
+        for key, value in corp_code_data.items():
+            if key in field_mappings:  # Only add mapped fields
+                row_cells = table.add_row().cells
+                row_cells[0].text = field_mappings[key]
+                row_cells[1].text = str(value) if value else 'N/A'
+
+                # Center align the first column
+                row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # Add some spacing after the table
     doc.add_paragraph()
@@ -531,10 +542,10 @@ async def generate_report_flow(company_url_input, selected_language):
                         if corp_code_data !='N/A':
                             corp_code_data=corp_short_list_data[int(corp_code_data)]
                             report_data['corp_code_data'] = corp_code_data
-    
+
                             with st.expander("View Company Information", expanded=False):
                                 st.write(corp_code_data)
-        
+
                             with st.expander("View Corp Code", expanded=False):
                                 st.write(corp_code_data['corp_code'])
 
