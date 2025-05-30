@@ -1,5 +1,5 @@
 import streamlit as st
-from prom_functions import (
+from test_functions import (
     generate_company_information,
     generate_corp_code,
     short_list,
@@ -605,8 +605,9 @@ async def generate_report_flow(company_url_input, selected_language):
                         with st.spinner("📊 Generating IM report using web search..."):
                             report, images, logs = await dart_get_report(
                                 query=query_template,
-                                corp_data=corp_code_data,
-                                path=None
+                                report_source=report_source,
+                                path=None,
+                                corp_data=corp_code_data
                             )
                         report_data['report'] = report
                         report_data['images'] = images
@@ -728,7 +729,7 @@ st.markdown("---")
 st.markdown(
     """
     <div style='text-align: center'>
-        <p>IM Report Generator | Powered by doAZ</p>
+        <p>IM Report Generator</p>
     </div>
     """,
     unsafe_allow_html=True)
