@@ -515,7 +515,7 @@ async def dart_search(corp_code, temp_dir):
 
 
 # MODIFIED: Removed streaming containers from function signature
-async def dart_get_report(query: str, corp_data, path: str) -> tuple[str, list]:
+async def dart_get_report(query: str, report_source:str, path: str,corp_data) -> tuple[str, list]:
     """Generate DART report using GPTResearcher asynchronously."""
     # if not path: # Handle case where dart_search might have returned None
     #     return "Error: Document path not available for DART report generation.", [], ""
