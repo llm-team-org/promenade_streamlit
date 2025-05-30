@@ -98,94 +98,94 @@ for i, report_data in enumerate(st.session_state.report_list):
     )
 
 
-def add_dart_company_table(doc, corp_code_data):
-    """Add DART company information table to the document"""
-    # Add a heading for company information
-    doc.add_heading('Company Information (DART)', level=1)
-
-    # Create a table with 2 columns (Field, Value)
-    table = doc.add_table(rows=1, cols=2)
-    table.style = 'Table Grid'
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    # Add header row
-    hdr_cells = table.rows[0].cells
-    hdr_cells[0].text = 'Field'
-    hdr_cells[1].text = 'Value'
-
-    # Make header bold - simplified approach
-    for cell in hdr_cells:
-        cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        # Only try to make bold if there are runs
-        if cell.paragraphs[0].runs:
-            for run in cell.paragraphs[0].runs:
-                run.bold = True
-
-    # Field mappings for better display names
-    field_mappings = {
-        'status': 'Status',
-        'message': 'Message',
-        'corp_code': 'Corporation Code',
-        'corp_name': 'Corporation Name',
-        'corp_name_eng': 'Corporation Name (English)',
-        'stock_name': 'Stock Name',
-        'stock_code': 'Stock Code',
-        'ceo_nm': 'CEO Name',
-        'corp_cls': 'Corporation Class',
-        'jurir_no': 'Juridical Number',
-        'bizr_no': 'Business Registration Number',
-        'adres': 'Address',
-        'hm_url': 'Homepage URL',
-        'ir_url': 'IR URL',
-        'phn_no': 'Phone Number',
-        'fax_no': 'Fax Number',
-        'induty_code': 'Industry Code',
-        'est_dt': 'Establishment Date',
-        'acc_mt': 'Account Month'
-    }
-
-    # Debug: Print what corp_code_data actually contains
-    print(f"DEBUG: corp_code_data = {corp_code_data}")
-    print(f"DEBUG: type(corp_code_data) = {type(corp_code_data)}")
-
-    # Check if corp_code is 'N/A' OR empty dict - if so, set all values to 'N/A'
-    if corp_code_data == 'N/A' or corp_code_data == {} or not corp_code_data:
-        print("Adding N/A rows to table...")  # Debug print
-        # Add all field mappings with 'N/A' values
-        for key, field_name in field_mappings.items():
-            row_cells = table.add_row().cells
-            row_cells[0].text = field_name
-            row_cells[1].text = 'N/A'
-
-            # Center align the first column
-            row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        print(f"Total rows in table: {len(table.rows)}")  # Debug print
-    else:
-        print("Adding regular data rows to table...")  # Debug print
-        print(
-            f"DEBUG: corp_code_data keys = {list(corp_code_data.keys()) if hasattr(corp_code_data, 'keys') else 'No keys method'}")
-
-        # Add data rows normally
-        rows_added = 0
-        for key, value in corp_code_data.items():
-            print(f"DEBUG: Checking key '{key}' - in field_mappings: {key in field_mappings}")
-            if key in field_mappings:  # Only add mapped fields
-                row_cells = table.add_row().cells
-                row_cells[0].text = field_mappings[key]
-                row_cells[1].text = str(value) if value else 'N/A'
-
-                # Center align the first column
-                row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-                rows_added += 1
-                print(f"DEBUG: Added row for key '{key}' with value '{value}'")
-
-        print(f"DEBUG: Total rows added: {rows_added}")
-        print(f"Total rows in table: {len(table.rows)}")  # Debug print
-
-    # Add some spacing after the table
-    doc.add_paragraph()
-    doc.add_page_break()
+# def add_dart_company_table(doc, corp_code_data):
+#     """Add DART company information table to the document"""
+#     # Add a heading for company information
+#     doc.add_heading('Company Information (DART)', level=1)
+#
+#     # Create a table with 2 columns (Field, Value)
+#     table = doc.add_table(rows=1, cols=2)
+#     table.style = 'Table Grid'
+#     table.alignment = WD_TABLE_ALIGNMENT.CENTER
+#
+#     # Add header row
+#     hdr_cells = table.rows[0].cells
+#     hdr_cells[0].text = 'Field'
+#     hdr_cells[1].text = 'Value'
+#
+#     # Make header bold - simplified approach
+#     for cell in hdr_cells:
+#         cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+#         # Only try to make bold if there are runs
+#         if cell.paragraphs[0].runs:
+#             for run in cell.paragraphs[0].runs:
+#                 run.bold = True
+#
+#     # Field mappings for better display names
+#     field_mappings = {
+#         'status': 'Status',
+#         'message': 'Message',
+#         'corp_code': 'Corporation Code',
+#         'corp_name': 'Corporation Name',
+#         'corp_name_eng': 'Corporation Name (English)',
+#         'stock_name': 'Stock Name',
+#         'stock_code': 'Stock Code',
+#         'ceo_nm': 'CEO Name',
+#         'corp_cls': 'Corporation Class',
+#         'jurir_no': 'Juridical Number',
+#         'bizr_no': 'Business Registration Number',
+#         'adres': 'Address',
+#         'hm_url': 'Homepage URL',
+#         'ir_url': 'IR URL',
+#         'phn_no': 'Phone Number',
+#         'fax_no': 'Fax Number',
+#         'induty_code': 'Industry Code',
+#         'est_dt': 'Establishment Date',
+#         'acc_mt': 'Account Month'
+#     }
+#
+#     # Debug: Print what corp_code_data actually contains
+#     print(f"DEBUG: corp_code_data = {corp_code_data}")
+#     print(f"DEBUG: type(corp_code_data) = {type(corp_code_data)}")
+#
+#     # Check if corp_code is 'N/A' OR empty dict - if so, set all values to 'N/A'
+#     if corp_code_data == 'N/A' or corp_code_data == {} or not corp_code_data:
+#         print("Adding N/A rows to table...")  # Debug print
+#         # Add all field mappings with 'N/A' values
+#         for key, field_name in field_mappings.items():
+#             row_cells = table.add_row().cells
+#             row_cells[0].text = field_name
+#             row_cells[1].text = 'N/A'
+#
+#             # Center align the first column
+#             row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+#
+#         print(f"Total rows in table: {len(table.rows)}")  # Debug print
+#     else:
+#         print("Adding regular data rows to table...")  # Debug print
+#         print(
+#             f"DEBUG: corp_code_data keys = {list(corp_code_data.keys()) if hasattr(corp_code_data, 'keys') else 'No keys method'}")
+#
+#         # Add data rows normally
+#         rows_added = 0
+#         for key, value in corp_code_data.items():
+#             print(f"DEBUG: Checking key '{key}' - in field_mappings: {key in field_mappings}")
+#             if key in field_mappings:  # Only add mapped fields
+#                 row_cells = table.add_row().cells
+#                 row_cells[0].text = field_mappings[key]
+#                 row_cells[1].text = str(value) if value else 'N/A'
+#
+#                 # Center align the first column
+#                 row_cells[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+#                 rows_added += 1
+#                 print(f"DEBUG: Added row for key '{key}' with value '{value}'")
+#
+#         print(f"DEBUG: Total rows added: {rows_added}")
+#         print(f"Total rows in table: {len(table.rows)}")  # Debug print
+#
+#     # Add some spacing after the table
+#     doc.add_paragraph()
+#     doc.add_page_break()
 
 
 def markdown_to_docx(markdown_text, company_name, language="english", corp_code_data=None):
@@ -197,10 +197,10 @@ def markdown_to_docx(markdown_text, company_name, language="english", corp_code_
 
     # Add DART company table if it's Korean language
     # Modified condition to handle both dict and 'N/A' string cases
-    if language.lower() == "korean" and corp_code_data is not None:
-        # Check if corp_code_data is a dict without error, or if it's 'N/A'
-        if (isinstance(corp_code_data, dict) and "error" not in corp_code_data) or corp_code_data == 'N/A' or corp_code_data == {}:
-            add_dart_company_table(doc, corp_code_data)
+    #if language.lower() == "korean" and corp_code_data is not None:
+        # # Check if corp_code_data is a dict without error, or if it's 'N/A'
+        # if (isinstance(corp_code_data, dict) and "error" not in corp_code_data) or corp_code_data == 'N/A' or corp_code_data == {}:
+        #     add_dart_company_table(doc, corp_code_data)
 
     # Split markdown into lines and process
     lines = markdown_text.split('\n')
@@ -606,8 +606,7 @@ async def generate_report_flow(company_url_input, selected_language):
                             report, images, logs = await dart_get_report(
                                 query=query_template,
                                 report_source=report_source,
-                                path=None,
-                                corp_data=corp_code_data
+                                path=None
                             )
                         report_data['report'] = report
                         report_data['images'] = images
@@ -644,8 +643,7 @@ async def generate_report_flow(company_url_input, selected_language):
                                     report, images, logs = await dart_get_report(
                                         query=query_template,
                                         report_source=report_source,
-                                        path=doc_path if report_source == 'hybrid' else None,
-                                        corp_data=corp_code_data
+                                        path=doc_path if report_source == 'hybrid' else None
                                     )
                                 report_data['report'] = report
                                 report_data['images'] = images
