@@ -690,7 +690,7 @@ def create_chat_object(tools_list):
     config = types.GenerateContentConfig(
         tools=tools_list
     )
-    chat_object = client.chats.create(model="gemini-1.5-flash",config=config)
+    chat_object = client.chats.create(model=os.getenv("GEMINI_MODEL_NAME"),config=config)
     return chat_object
 
 

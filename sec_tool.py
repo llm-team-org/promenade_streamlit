@@ -2,6 +2,7 @@ from sec_extractor import sec_section_extractor
 from sec_filings_query import query_sec_filings
 from sec_full_text_search import sec_full_text_search
 from google.genai import types, Client
+import os
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -45,7 +46,7 @@ def sec_tool_function(query: str) -> str:
 
     # Make the request
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model=os.getenv("GEMINI_MODEL_NAME"),
         contents=query,
         config=config,
     )
