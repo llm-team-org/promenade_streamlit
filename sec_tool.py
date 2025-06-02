@@ -50,4 +50,4 @@ def sec_tool_function(query: str) -> str:
         config=config,
     )
 
-    return response
+    return response.text
