@@ -416,7 +416,7 @@ async def sec_search(company_name,ticker):
     fullTextSearchApi = FullTextSearchApi(api_key=SEC_API_KEY)
     query = {
         "query": f"{company_name} {ticker}",
-        "formTypes": ['10-K'],
+        "formTypes": ['10-K','8-K','20-F','10-Q'],
         "startDate": '2020-01-01',
     }
     # Run synchronous SDK call in a thread
@@ -430,7 +430,7 @@ async def sec_get_report(query: str, report_type: str, sources: list) -> tuple[s
     # COMMENTED OUT: StreamlitLogHandler for streaming logs
     # logs_handler = StreamlitLogHandler(logs_container, report_container)
 
-    query= query + "-Add SEC filings references from source url as well in references"
+    query= query + f"-Add these SEC filings references from source url '{sources}' as well in references"
     # MODIFIED: Removed websocket parameter (streaming handler)
     researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
                                config_path="config.json")
