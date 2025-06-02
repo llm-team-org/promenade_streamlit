@@ -430,7 +430,7 @@ async def sec_get_report(query: str, report_type: str, sources: list) -> tuple[s
     # COMMENTED OUT: StreamlitLogHandler for streaming logs
     # logs_handler = StreamlitLogHandler(logs_container, report_container)
 
-    query= "Use the source_urls in references as well with other references" + query
+    query= query + "-Use Only Accurate and Authentic references from the web and from SEC filings too"
     # MODIFIED: Removed websocket parameter (streaming handler)
     researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
                                config_path="config.json")
@@ -523,9 +523,7 @@ table_format="""
 | **Financial Audit**    | {FinancialAudit}            |                          |                              |
 | **Line of Business**   | {LineOfBusiness}            |                          |                              |
 | **Address**            | {Address}                   |                          |                              |
-
-
-| **Year** | **Corporate History Details**        |
+| **Year** | **Corporate History Details**          |
 |----------|--------------------------------------|
 | 2025     | {History_2025}                       |
 | 2023     | {History_2023}                       |
@@ -566,6 +564,8 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
             For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value
             Table format should be like this: {table_format}
             if you dont have any value for them then write "N/A" in table.
+            
+            Use Accurate and Authentic references with DART filings too.
             
             Generate in English language
             """
