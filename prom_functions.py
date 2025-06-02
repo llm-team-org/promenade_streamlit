@@ -430,7 +430,7 @@ async def sec_get_report(query: str, report_type: str, sources: list) -> tuple[s
     # COMMENTED OUT: StreamlitLogHandler for streaming logs
     # logs_handler = StreamlitLogHandler(logs_container, report_container)
 
-    query= "Use the source_urls in references as well with other references" + query
+    query= query + "-Add SEC filings references as well in references"
     # MODIFIED: Removed websocket parameter (streaming handler)
     researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
                                config_path="config.json")
@@ -560,7 +560,7 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
     # if not path: # Handle case where dart_search might have returned None
     #     return "Error: Document path not available for DART report generation.", [], ""
     query= f"""
-            Use this tone for report generation : Simple/Factual tone: 이 보고서는 회사의 중요한 정보를 포함함
+            Use this tone for report generation : Simple/Factual tone
             {query}
             
             For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value
