@@ -14,7 +14,7 @@ def sec_full_text_search(
     """
     Performs a full-text search across SEC EDGAR filings and exhibits
     submitted since 2001 using the sec-api.io Full-Text Search API.
-    Use this tool to get information about sec-filings-url and anyother 
+    Use this tool to get real time information about sec-filings-url and anyother 
     information in the filings array.
 
     ## Args

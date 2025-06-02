@@ -14,7 +14,7 @@ import asyncio
 import os
 import nest_asyncio
 import tempfile
-from google.genai import Client # Assuming this is the correct client for chat_object
+from google.genai import Client, types # Assuming this is the correct client for chat_object
 from load_files import process_files_and_get_chat_object
 from dotenv import load_dotenv
 load_dotenv()
@@ -61,11 +61,13 @@ def init_session_state():
         st.session_state.last_company_url = ""
     if 'google_client' not in st.session_state:
         st.session_state.google_client = Client()
-    # Removed 'chat_histories' as it was primarily used by the removed document_chat_page
-    if 'sec_agent_query_answer' not in st.session_state: # Still used by combined_tools_chat_page
+    if 'sec_agent_query_answer' not in st.session_state:
         st.session_state.sec_agent_query_answer = []
-    # if 'available_tools' not in st.session_state:
-        # st.session_state.available_tools = {"Web Search Tool":web_search_tool, "SEC Filings Search Tool": sec_tool_function}
+    if 'chat_objects' not in st.session_state:
+        st.session_state.chat_objects = {}
+    if 'selected_chat_name' not in st.session_state:
+        st.session_state.selected_chat_name = None
+
 
 # --- Helper Functions for UI and State Management ---
 
@@ -683,6 +685,15 @@ def process_uploaded_file(uploaded_file):
         return {"name": uploaded_file.name, "path": file_path, "id": os.path.basename(file_path), 'tools_list': tools_list}
     return None
 
+def create_chat_object(tools_list):
+    client = st.session_state.google_client
+    config = types.GenerateContentConfig(
+        tools=tools_list
+    )
+    chat_object = client.chats.create(model="gemini-1.5-flash",config=config)
+    return chat_object
+
+
 # --- UI Rendering Functions (Pages) ---
 def render_sidebar_navigation():
     """Renders the navigation buttons in the sidebar."""
@@ -822,7 +833,7 @@ def combined_tools_chat_page():
     uploaded_file = st.file_uploader(
         "Choose a file to add its specific chat tool",
         type=["pdf", "txt", "csv", "docx", "xlsx"],
-        key="file_uploader_combined" # Changed key to avoid conflict if other uploaders exist
+        key="file_uploader_combined"
     )
     if uploaded_file:
         existing_file_names = [file['name'] for file in st.session_state.uploaded_files]
@@ -831,61 +842,115 @@ def combined_tools_chat_page():
                 processed_info = process_uploaded_file(uploaded_file)
                 if processed_info:
                     st.session_state.uploaded_files.append(processed_info)
-                    # No need to initialize chat_histories here as it's removed
                 else:
                     st.error("Failed to process document.")
         else:
             st.info(f"Document '{uploaded_file.name}' is already uploaded and processed.")
-            # Logic to select this file for chat could be added if needed
 
-    st.subheader("Chat with Tools")
-    # Ensure default tools are always options and selected by default
+    st.subheader("Create and Select Chat")
+
+    # Prepare tool options for multiselect
     default_tool_names = ["Web Search Tool", "SEC Filings Search Tool"]
-    available_tool_options = [file['name'] for file in st.session_state.uploaded_files]
-    
-    # Determine default selections: all default tools + any newly uploaded unique tools
-    current_selection = [tool_name for tool_name in default_tool_names if tool_name in available_tool_options]
-    # Add other uploaded files to selection if they are not already part of default
-    for file_info in st.session_state.uploaded_files:
-        if file_info['name'] not in current_selection:
-            current_selection.append(file_info['name'])
+    available_tool_options = list(set(default_tool_names + [file['name'] for file in st.session_state.uploaded_files]))
 
+    # Determine default selections: all available tools
+    current_selection = available_tool_options
 
     selected_tools_names = st.multiselect(
-        "Select the tools you want to use for your query:",
+        "Select the tools you want to use for your chat:",
         options=available_tool_options,
         default=current_selection # Select all available tools by default
-        )
+    )
 
-    # Display previous Q&A using st.session_state.sec_agent_query_answer
-    for query_answer in st.session_state.sec_agent_query_answer:
-        with st.container(border=True):
-            with st.chat_message('user'):
-                st.write(query_answer['query'])
-            with st.chat_message('assistant'):
-                st.write(query_answer['answer'])
-    
-    user_query = st.chat_input("Ask your query using the selected tools:")
-    if user_query:
+    chat_name_input = st.text_input("Enter a name for this chat:", value=f"Chat {len(st.session_state.chat_objects) + 1}")
+
+    if st.button("Create Chat Object"):
         if not selected_tools_names:
-            st.warning("Please select at least one tool to query.")
+            st.warning("Please select at least one tool to create a chat.")
+        elif chat_name_input in st.session_state.chat_objects:
+            st.warning(f"A chat with the name '{chat_name_input}' already exists. Please choose a different name.")
         else:
-            with st.container(border=True):
-                with st.chat_message("user"):
-                    st.write(user_query)
-                with st.spinner("Getting answer using selected tools..."):
-                    # Flatten the list of tool lists
-                    tools_list_to_send = []
-                    for file_info in st.session_state.uploaded_files:
-                        if file_info['name'] in selected_tools_names:
-                            tools_list_to_send.extend(file_info['tools_list'])
-                    
-                    answer = get_answer_to_query(user_query, tools_list_to_send) # Assuming get_answer_to_query can handle a flat list of tools
+            # Collect the actual tool objects based on selected names
+            tools_for_chat = []
+            tool_names = []
+            # Add tools from uploaded files
+            for file_info in st.session_state.uploaded_files:
+                if file_info['name'] in selected_tools_names:
+                    tool_names.append(file_info['name'])
+                    tools_for_chat.extend(file_info['tools_list'])
+
+            if tools_for_chat:
+                new_chat_object = create_chat_object(tools_for_chat)
+                st.session_state.chat_objects[chat_name_input] = {'chat_object':new_chat_object, 'tool_names':tool_names}
+                st.session_state.selected_chat_name = chat_name_input # Automatically select the new chat
+                st.success(f"Chat '{chat_name_input}' created successfully!")
+                st.rerun() # Rerun to update the chat selection dropdown
+            else:
+                st.error("No tools were available to create the chat. Please ensure tools are properly processed.")
+
+    # Divide the page into two columns
+    col1, col2 = st.columns([1, 6]) # Adjust ratios as needed
+
+    with col1:
+        st.subheader("Select Chat")
+        if st.session_state.chat_objects:
+            chat_names = list(st.session_state.chat_objects.keys())
+            # Set default to the currently selected chat if it exists, otherwise the first one
+            default_index = chat_names.index(st.session_state.selected_chat_name) if st.session_state.selected_chat_name in chat_names else 0
+            
+            selected_chat_name_from_dropdown = st.radio(
+                "Choose a chat to interact with:",
+                options=chat_names,
+                index=default_index,
+                key="chat_selector"
+            )
+            if selected_chat_name_from_dropdown:
+                st.session_state.selected_chat_name = selected_chat_name_from_dropdown
+        else:
+            st.info("No chat objects available. Please create one.")
+
+    with col2:
+        if st.session_state.selected_chat_name:
+            current_chat = st.session_state.chat_objects[st.session_state.selected_chat_name]['chat_object']
+            tools_used = st.session_state.chat_objects[st.session_state.selected_chat_name]['tool_names']
+
+            # Display chat history for the selected chat
+            new_line_string = "\n\n"
+            tools_name_string = ", ".join(tools_used)
+            st.subheader(f"Chat with {st.session_state.selected_chat_name}{new_line_string}{tools_name_string}")
+            chat_history = current_chat.get_history()
+            for message in chat_history:
+                message_role = message.role
+                if message_role == 'model':
+                    message_role = 'ai'
+                text_message = message.parts[0].text
+                if text_message:
+                    with st.chat_message(message_role):
+                        st.write(text_message)
+                function_call_message = message.parts[0].function_call
+                if function_call_message:
+                    function_call_name = function_call_message.name
+                    function_call_args = function_call_message.args
+                    with st.expander(f"⚙️ Tool Call: {function_call_name}", expanded=False):
+                        st.json(function_call_args)
+                function_response_message = message.parts[0].function_response
+                if function_response_message:
+                    function_response_name = function_response_message.name
+                    function_response_result = function_response_message.response
+                    with st.expander(f"✅ Tool Result for {function_response_name}", expanded=False):
+                        st.json(function_response_result)
+
+            
+
+            user_query = st.chat_input(f"Ask your query to '{st.session_state.selected_chat_name}':", key="chat_input_combined")
+            if user_query:
+                with st.spinner("Getting answer..."):
+                    answer = current_chat.send_message(user_query)
                 if not answer:
-                    answer = "Failed to get answer from the combined tools."
-                new_query_answer = {'query':user_query, 'answer':answer}
-                st.session_state.sec_agent_query_answer.append(new_query_answer)
-                st.rerun()
+                    answer = "Failed to get an answer from this chat."
+                st.rerun() # Rerun to display the new message
+        else:
+            st.info("Please select or create a chat object to start chatting.")
 
 # --- Core Report Generation Logic (Unchanged) ---
 

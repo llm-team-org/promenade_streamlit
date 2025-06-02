@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def sec_tool_function(query: str) -> str:
-    """Use the SEC Filings Search Tool to extract specific text or HTML sections from SEC 10-K, 10-Q, or 8-K filings. This tool is designed to understand your natural language query and automatically identify the most relevant section within the SEC filing to find the information you need. It's useful for retrieving cleaned and standardized content from public company disclosures since 1994, including amended versions.
+    """Use the SEC Filings Search Tool to extract specific text or HTML sections from SEC 10-K, 10-Q, or 8-K filings. This tool is designed to provide you real time information of SEC Filings data to answer user queries. It's useful for retrieving cleaned and standardized content from public company disclosures since 1994, including amended versions.
 
     You can use this tool to find various types of information, such as:
 
@@ -45,9 +45,9 @@ def sec_tool_function(query: str) -> str:
 
     # Make the request
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-1.5-flash",
         contents=query,
         config=config,
     )
 
-    return response.text
+    return response

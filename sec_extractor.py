@@ -12,7 +12,8 @@ def sec_section_extractor(
 
     This tool interfaces with the sec-api.io Extractor API to fetch cleaned and
     standardized content from SEC filings. It supports all filings since 1994,
-    including amended versions and various form types.
+    including amended versions and various form types Use this to fetch real time 
+    information to answer user queries.
 
     Supported 10-K Section Items:
         '1': Business - Overview of the company's operations and business.
