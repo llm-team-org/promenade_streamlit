@@ -430,7 +430,7 @@ async def sec_get_report(query: str, report_type: str, sources: list) -> tuple[s
     # COMMENTED OUT: StreamlitLogHandler for streaming logs
     # logs_handler = StreamlitLogHandler(logs_container, report_container)
 
-    query= query + "-Add SEC filings references as well in references"
+    query= query + "-Add SEC filings references from source url as well in references"
     # MODIFIED: Removed websocket parameter (streaming handler)
     researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
                                config_path="config.json")
@@ -515,28 +515,27 @@ async def dart_search(corp_code, temp_dir):
 
 
 table_format="""
-| **Business #**         | {BusinessNumber}            | **Corp Registration #**  | {CorpRegistrationNumber}      |
-|-----------------------|-----------------------------|--------------------------|------------------------------|
-| **CEO Name**           | {CEOName}                   | **Incorporation Date**    | {IncorporationDate}           |
-| **Capital Stock**      | {CapitalStock}              | **# of Employees**        | {NumberOfEmployees}           |
-| **Major Shareholders** | {MajorShareholders}         | **Company Type**          | {CompanyType}                 |
-| **Financial Audit**    | {FinancialAudit}            |                          |                              |
-| **Line of Business**   | {LineOfBusiness}            |                          |                              |
-| **Address**            | {Address}                   |                          |                              |
+| **Business #**         | {BusinessNumber}            | **Corp Registration #**  | {CorpRegistrationNumber}    |
+|------------------------|-----------------------------|--------------------------|-----------------------------|
+| **CEO Name**           | {CEOName}                   | **Incorporation Date**   | {IncorporationDate}         |
+| **Capital Stock**      | {CapitalStock}              | **# of Employees**       | {NumberOfEmployees}         |
+| **Major Shareholders** | {MajorShareholders}         | **Company Type**         | {CompanyType}               |
+| **Financial Audit**    | {FinancialAudit}            |                          |                             |
+| **Line of Business**   | {LineOfBusiness}            |                          |                             |
+| **Address**            | {Address}                   |                          |                             |
 
 
-| **Year** | **Corporate History Details**        |
-|----------|--------------------------------------|
-| 2025     | {History_2025}                       |
-| 2023     | {History_2023}                       |
-| 2021     | {History_2021}                       |
-| 2017     | {History_2017}                       |
-| 2010     | {History_2010}                       |
-| 2000     | {History_2000}                       |
-| 1993     | {History_1993}                       |
-| 1980s    | {History_1980s}                      |
-| 1970     | {History_1970}                       |
-| 1969     | {History_1969}                       |
+| **Year** | **Corporate History Details**(If available)|
+|----------|--------------------------------------------|
+| 2025     | {History_2025}                             |
+| 2023     | {History_2023}                             |
+| 2021     | {History_2021}                             |
+| 2017     | {History_2017}                             |
+| 2010     | {History_2010}                             |
+| 2000     | {History_2000}                             |
+| 1993     | {History_1993}                             |
+| 1980s    | {History_1980s}                            |
+
 """
 table_data="""
 
@@ -563,9 +562,10 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
             Use this tone for report generation : Simple/Factual tone
             {query}
             
-            For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value
+            For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value.
             Table format should be like this: {table_format}
-            if you dont have any value for them then write "N/A" in table.
+            if you dont have any value for them then write "N/A" in table. 
+            if Corporate History data is not available of some years then just write those which are available.
             
             Generate in English language
             """
