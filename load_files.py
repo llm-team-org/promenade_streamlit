@@ -217,11 +217,11 @@ def process_files_and_get_chat_object(file_path_list: list[str], client:Client):
             tool = get_retriever_function(file_path=file_path, client=client)
             tool_list.append(tool)
     
-    config = types.GenerateContentConfig(
-        tools=tool_list
-    )  
+    # config = types.GenerateContentConfig(
+        # tools=tool_list
+    # )  
 
 
-    chat = client.chats.create(model="gemini-2.0-flash", config=config)
+    # chat = client.chats.create(model="gemini-2.0-flash", config=config)
 
-    return chat
+    return tool_list

@@ -2,29 +2,36 @@ import streamlit as st
 from prom_functions import (
     generate_company_information,
     generate_corp_code,
-    short_list,
+    short_list, # Note: short_list is imported in the new code but get_dart_company_information is used first for DART.
     sec_search,
     sec_get_report,
     dart_search,
-    dart_get_report
+    dart_get_report,
+    get_dart_company_information # Ensure this function is defined in your prom_functions.py
 )
+import io
 import asyncio
 import os
 import nest_asyncio
 import tempfile
-from google.genai import Client # Assuming this is the correct client for chat_object
+from google.genai import Client, types # Assuming this is the correct client for chat_object
 from load_files import process_files_and_get_chat_object
 from dotenv import load_dotenv
 load_dotenv()
-from sec_agent import run_agent
+from sec_tool import sec_tool_function
+from web_search import web_search_tool
+from combined_tool import get_answer_to_query
+import traceback
+from docx import Document
+from docx.shared import Inches
+from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 # Apply nest_asyncio to handle asyncio in Streamlit
 nest_asyncio.apply()
 
 # --- Page Constants ---
 PAGE_REPORT_GENERATOR = "Report Generator"
-PAGE_SEC_CHAT = "SEC Agent Chat"
-PAGE_DART_CHAT = "DART Filings Agent Chat"
-PAGE_DOCUMENT_CHAT = "Chat with Document" # Renamed from PAGE_PDF_CHAT
+PAGE_COMBINED_CHAT = "Chat With Tools"
 
 # --- Page Configuration and Session State Initialization ---
 
@@ -45,7 +52,7 @@ def init_session_state():
     if 'current_page' not in st.session_state:
         st.session_state.current_page = PAGE_REPORT_GENERATOR
     if 'uploaded_files' not in st.session_state: # Renamed from uploaded_pdfs
-        st.session_state.uploaded_files = []
+        st.session_state.uploaded_files = [{"name": "Web Search Tool", "path": "", "id": "Web Search Tool", 'tools_list': [web_search_tool]}, {"name":"SEC Filings Search Tool", "path":"", "id":"SEC Filings Search Tool", "tools_list":[sec_tool_function]}]
     if 'selected_file_for_chat' not in st.session_state: # Renamed from selected_pdf_for_chat
         st.session_state.selected_file_for_chat = None
     if 'last_filings_selection' not in st.session_state:
@@ -54,12 +61,20 @@ def init_session_state():
         st.session_state.last_company_url = ""
     if 'google_client' not in st.session_state:
         st.session_state.google_client = Client()
-    if 'chat_histories' not in st.session_state: # New: Store chat history per document
-        st.session_state.chat_histories = {}
+    if 'last_statement_types' not in st.session_state:
+        st.session_state.last_statement_types = ["Income Statement"]
     if 'sec_agent_query_answer' not in st.session_state:
         st.session_state.sec_agent_query_answer = []
+    if 'chat_objects' not in st.session_state:
+        st.session_state.chat_objects = {}
+    if 'selected_chat_name' not in st.session_state:
+        st.session_state.selected_chat_name = None
+
 
 # --- Helper Functions for UI and State Management ---
+
+def write_multiline_text(text:str)->str:
+    return "\n\n".join(text.splitlines())
 
 def set_report_to_display(report):
     """Sets the report to be displayed in the main content area."""
@@ -77,11 +92,465 @@ def remove_report_from_list(report_to_remove):
 def navigate_to(page_name):
     """Sets the current page in session state for navigation."""
     st.session_state.current_page = page_name
-    # Clear main display when navigating to a chat page
-    # if page_name != PAGE_REPORT_GENERATOR:
     st.session_state.report_to_display = None
 
 # --- UI Rendering Functions ---
+
+def markdown_to_docx(markdown_text, company_name, language="english", corp_code_data=None):
+    """Convert markdown text to a Word document"""
+    doc = Document()
+
+    # Add title
+    title = doc.add_heading(f'Information Memorandum - {company_name}', 0)
+
+    # Add DART company table if it's Korean language
+    # Modified condition to handle both dict and 'N/A' string cases
+    #if language.lower() == "korean" and corp_code_data is not None:
+        # # Check if corp_code_data is a dict without error, or if it's 'N/A'
+        # if (isinstance(corp_code_data, dict) and "error" not in corp_code_data) or corp_code_data == 'N/A' or corp_code_data == {}:
+        #     add_dart_company_table(doc, corp_code_data)
+
+    # Split markdown into lines and process
+    lines = markdown_text.split('\n')
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # Handle headers
+        if line.startswith('# '):
+            doc.add_heading(line[2:], level=1)
+        elif line.startswith('## '):
+            doc.add_heading(line[3:], level=2)
+        elif line.startswith('### '):
+            doc.add_heading(line[4:], level=3)
+        elif line.startswith('#### '):
+            doc.add_heading(line[5:], level=4)
+        # Handle bullet points
+        elif line.startswith('- ') or line.startswith('* '):
+            doc.add_paragraph(line[2:], style='List Bullet')
+        # Handle numbered lists
+        elif line.startswith(('1. ', '2. ', '3. ', '4. ', '5. ', '6. ', '7. ', '8. ', '9. ')):
+            doc.add_paragraph(line[3:], style='List Number')
+        # Handle bold text (basic implementation)
+        elif '**' in line:
+            p = doc.add_paragraph()
+            parts = line.split('**')
+            for i, part in enumerate(parts):
+                if i % 2 == 0:
+                    p.add_run(part)
+                else:
+                    p.add_run(part).bold = True
+        # Regular paragraph
+        else:
+            doc.add_paragraph(line)
+
+    return doc
+
+def display_report(report_data):
+    company_data = report_data.get('company_data', {})
+    if not company_data or "error" in company_data:
+        st.error(f"❌ Failed to extract company information: {company_data.get('error', 'Unknown error')}")
+        if "raw_content" in company_data: st.expander("Raw LLM Output").write(write_multiline_text(company_data["raw_content"]))
+        return
+
+    st.success("✅ Company information extracted successfully!")
+
+    # Display company data
+    st.subheader("📋 Company Information")
+    with st.expander("View Company Details", expanded=True):
+        st.json(company_data)
+
+    # Extract key information
+    full_name = company_data.get('company_name', 'N/A')
+    first_name = company_data.get('company_first_name', 'N/A')
+    selected_language = report_data.get('language', '')
+
+    # Conditional display based on language
+    if selected_language.lower() == "english":
+        ticker = company_data.get('ticker', 'N/A')
+        # Display basic info for English/SEC
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Company Name", full_name)
+        with col2:
+            st.metric("First Name", first_name)
+        with col3:
+            st.metric("Ticker", ticker)
+    else:
+        # For Korean/DART, show corp code instead of ticker
+        corp_code_data = report_data.get('corp_code_data', {})
+        corp_code = corp_code_data.get('corp_code', 'N/A') if isinstance(corp_code_data, dict) else 'N/A'
+
+
+        # Display basic info for Korean/DART
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Company Name", full_name)
+        with col2:
+            st.metric("First Name", first_name)
+        with col3:
+            st.metric("Corp Code", corp_code)
+
+    if full_name == 'N/A':
+        st.error("❌ Company name could not be determined. Cannot proceed.")
+        return
+
+    st.markdown("---")
+    report = report_data.get('report', '')
+    images = report_data.get('images', [])
+
+    # Process based on language
+    if selected_language.lower() == "english":
+        st.subheader("🇺🇸 SEC Filing Analysis")
+
+        filings_data = report_data.get('filings_data', {})
+
+        if not filings_data or not filings_data.get('filings'):
+            st.warning("⚠️ No SEC filings found or error in fetching.")
+        else:
+            st.success(f"✅ Found {len(filings_data.get('filings', []))} SEC filings.")
+            with st.expander("View SEC Filings", expanded=False):
+                st.json(filings_data)
+
+            urls = [filing['filingUrl'] for filing in filings_data['filings'] if 'filingUrl' in filing]
+            if not urls:
+                st.warning("⚠️ No URLs found in SEC filings to generate report from.")
+            else:
+                st.success("✅ SEC report generated successfully!") # This message might be better placed after actual report generation step
+
+    elif selected_language.lower() == "korean":
+        st.subheader("🇰🇷 DART Filing Analysis")
+
+        corp_short_list_data = report_data.get('corp_short_list_data', {})
+        report_source = report_data.get('report_source', 'web')
+        web_search_reason = report_data.get('web_search_reason', '')
+
+        if isinstance(corp_short_list_data, str) and "not in the dart list" in corp_short_list_data.lower():
+            st.info("ℹ️ Company not in DART list. Report generated using web search.")
+        elif web_search_reason == "not in short dart list":
+            st.info("ℹ️ Company in DART list but not found in short DART list. Report generated using web search.")
+        elif web_search_reason == "error in dart lookup":
+            st.info("ℹ️ Error in DART lookup. Report generated using web search.")
+        elif web_search_reason == "corp code generation failed":
+            st.info("ℹ️ DART corporation code generation failed. Report generated using web search.")
+        elif not corp_short_list_data : # Handles empty dict or other falsy values for corp_short_list_data if it's not an error string
+             if report_source == 'web': # Only show this if web search was indeed the fallback
+                st.info("ℹ️ Company not found in DART list. Report generated using web search.")
+        else: # corp_short_list_data has data
+            st.success("✅ Company found in DART short list.")
+            with st.expander("View Short List", expanded=False):
+                st.write(corp_short_list_data)
+
+            corp_code_data_from_report = report_data.get('corp_code_data', {}) # Renamed to avoid clash
+            if isinstance(corp_code_data_from_report, dict) and "error" not in corp_code_data_from_report and corp_code_data_from_report.get('corp_code') != 'N/A':
+                st.success("✅ DART Corporation code generated.")
+                with st.expander("View Corporation Code Details", expanded=False): # Changed title for clarity
+                    st.json(corp_code_data_from_report)
+
+        if report_source == 'web':
+            st.info("ℹ️ Report generated using web search.")
+        else:
+            st.success("✅ Success! Report generated using DART filings!")
+
+
+    if report:
+        st.subheader(f"📈 {selected_language.capitalize()} Investment Report")
+
+        st.markdown("---")
+        st.markdown(report)
+
+    elif not ("Error" in report if isinstance(report, str) else False):
+        st.info("ℹ️ Report generation did not produce output, or path was skipped.")
+
+    if images:
+        st.subheader("🖼️ Report Images")
+        for i, image_data in enumerate(images):
+            st.image(image_data, caption=f"Report Image {i + 1}")
+
+
+async def generate_report_flow(company_url_input, selected_language):
+    report_data = {'url': company_url_input, 'language': selected_language}
+
+    try:
+        with st.spinner("🔍 Analyzing company information..."):
+            # Assuming generate_company_information is an async function from prom_functions
+            company_data = await generate_company_information(company_url_input, selected_language)
+            # The line `report = company_data` was present; unclear if intentional or a typo.
+            # Storing company_data in report_data seems correct.
+            report_data['company_data'] = company_data
+
+        if not company_data or (isinstance(company_data, dict) and "error" in company_data):
+            error_msg = company_data.get('error', 'Unknown error') if isinstance(company_data, dict) else "Invalid company data"
+            st.error(f"❌ Failed to extract company information: {error_msg}")
+            if isinstance(company_data, dict) and "raw_content" in company_data:
+                st.expander("Raw LLM Output").write(company_data["raw_content"])
+            return # Stop further processing
+
+        st.success("✅ Company information extracted successfully!")
+
+        st.subheader("📋 Company Information")
+        with st.expander("View Company Details", expanded=True):
+            st.json(company_data)
+
+        full_name = company_data.get('company_name', 'N/A')
+        first_name = company_data.get('company_first_name', 'N/A')
+
+        if full_name == 'N/A':
+            st.error("❌ Company name could not be determined. Cannot proceed.")
+            return
+
+        if selected_language.lower() == "english":
+            ticker = company_data.get('ticker', 'N/A')
+            col1, col2, col3 = st.columns(3)
+            with col1: st.metric("Company Name", full_name)
+            with col2: st.metric("First Name", first_name)
+            with col3: st.metric("Ticker", ticker)
+        # For Korean, metrics including corp_code are shown later after corp_code generation
+
+        statement_type = st.session_state.last_statement_types
+        if statement_type:
+            finanace_report = f"Also Add {statement_type} in detail"
+        else:
+            finanace_report = ""
+
+        query_template = f"""As an investment associate, draft an information memorandum for company: {full_name}
+        Information of Company: {company_data}
+
+        -ADD These in table of contents:
+
+        These are the Headings you need to use for IM and then generate sub headings for each heading
+        1.Executive Summary
+        2.Investment Highlights
+        3.Company Overview
+            Introduction to {full_name}
+            History, Mission, and Core Values
+            Global Presence and Operations
+        4.Business Model, Strategy, and Product
+        5.Business Segments Deep Dive
+        6.Industry Overview and Competitive Positioning
+        7.Financial Performance Analysis 
+            Revenue
+            {finanace_report}
+        8.Management and Corporate Governance
+        9.Strategic Initiatives and Future Growth Drivers 
+        10.Risk Factors 
+        11.Investment Considerations
+        12.Conclusion
+        13.References (Accurate and Authentic)
+        
+        -Add Tables: Display structured data like numbers, dates, comparisons, or lists in a table with headers, then summarize its main takeaways. For other content, use bullet points or numbered lists.
+
+        -(Please exclude SWOT analysis)
+        """
+        st.markdown("---")
+        report_content = "" # Renamed from 'report' to avoid conflict with company_data assignment earlier if it was a typo
+        images = []
+        corp_code_value = 'N/A' # Initialize for DART
+
+        if selected_language.lower() == "english":
+            st.subheader("🇺🇸 SEC Filing Analysis")
+            try:
+                with st.spinner("📄 Searching SEC filings..."):
+                    ticker = company_data.get('ticker', 'N/A') # Ensure ticker is available
+                    filings_data = await sec_search(full_name, ticker)
+                    report_data['filings_data'] = filings_data
+
+                if not filings_data or not filings_data.get('filings'):
+                    st.info("⚠️ No SEC filings found or error in fetching.")
+                    urls = []
+                else:
+                    st.success(f"✅ Found {len(filings_data.get('filings', []))} SEC filings.")
+                    with st.expander("View SEC Filings", expanded=False):
+                        st.json(filings_data)
+                    urls = [filing['filingUrl'] for filing in filings_data['filings'] if 'filingUrl' in filing]
+                    if not urls: st.warning("⚠️ No URLs found in SEC filings to generate report from.")
+
+                try:
+                    with st.spinner("📊 Generating comprehensive IM report..."):
+                        report_content, images, _ = await sec_get_report( # Assuming logs are not needed here
+                            query=query_template,
+                            report_type="research_report",
+                            sources=urls # Using all URLs as per new code
+                        )
+                    report_data['report'] = report_content
+                    report_data['images'] = images
+                    st.success("✅ IM report generated successfully!")
+                except Exception as sec_error:
+                    st.error(f"❌ Error generating report: {str(sec_error)}")
+                    st.expander("Error Details").write(f"Full error: {write_multiline_text(traceback.format_exc())}")
+                    return
+                    report_data['report'] = f"Error generating report: {str(sec_error)}"
+            except Exception as filing_error:
+                st.error(f"❌ Error in SEC filing process: {str(filing_error)}")
+                st.expander("Error Details").write(f"Full error: {write_multiline_text(traceback.format_exc())}")
+                return
+                report_data['report'] = f"Error in SEC filing process: {str(filing_error)}"
+
+
+        elif selected_language.lower() == "korean":
+            st.subheader("🇰🇷 DART Filing Analysis")
+            corp_code_data_for_report = {} # Initialize
+            try:
+                with st.spinner("📝 Generating company short list for DART..."):
+                    company_first_name_for_dart = first_name if first_name != 'N/A' else full_name.split(" ")[0]
+                    # Using get_dart_company_information as per new script
+                    corp_short_list_data = await get_dart_company_information(full_name, company_first_name_for_dart)
+                    report_data['corp_short_list_data'] = corp_short_list_data
+
+                use_web_search = False
+                web_search_reason = ""
+
+                if isinstance(corp_short_list_data, str) and "not in the dart list" in corp_short_list_data.lower():
+                    st.info("ℹ️ Company not in DART list. Using web search instead.")
+                    use_web_search = True
+                    web_search_reason = "not in dart list"
+                elif isinstance(corp_short_list_data, str) and "Error" in corp_short_list_data:
+                    st.info(f"ℹ️ Error in DART lookup: {corp_short_list_data}. Using web search instead.")
+                    use_web_search = True
+                    web_search_reason = "error in dart lookup"
+                elif not corp_short_list_data or (isinstance(corp_short_list_data, dict) and not corp_short_list_data):
+                    st.info("ℹ️ Company in DART list but not found in short DART list. Using web search instead.")
+                    use_web_search = True
+                    web_search_reason = "not in short dart list"
+                else: # Company found in DART short list (corp_short_list_data is likely a list of dicts)
+                    st.success("✅ Company found in DART short list.")
+                    with st.expander("View Short List", expanded=False): st.write(corp_short_list_data)
+
+                    with st.spinner("🔢 Generating DART corporation code..."):
+                        # generate_corp_code now takes company_url_input
+                        selected_corp_index_str = await generate_corp_code(full_name, corp_short_list_data, company_url_input)
+                        # st.write(selected_corp_index_str) # Original debug line
+
+                        if selected_corp_index_str != 'N/A' and selected_corp_index_str is not None:
+                            try:
+                                selected_index = int(selected_corp_index_str)
+                                if 0 <= selected_index < len(corp_short_list_data):
+                                    corp_code_data_for_report = corp_short_list_data[selected_index]
+                                    report_data['corp_code_data'] = corp_code_data_for_report
+                                    corp_code_value = corp_code_data_for_report.get('corp_code', 'N/A')
+
+                                    with st.expander("View Company Information (DART)", expanded=False):
+                                        st.write(corp_code_data_for_report)
+                                    with st.expander("View Corp Code (DART)", expanded=False):
+                                        st.write(corp_code_value)
+                                    st.success("✅ DART Corporation code processed.")
+                                else:
+                                    st.info("ℹ️ Invalid index for DART company. Using web search.")
+                                    use_web_search = True
+                                    web_search_reason = "corp code generation failed - invalid index"
+                            except ValueError:
+                                st.info("ℹ️ Corp code selection was not a valid number. Using web search.")
+                                use_web_search = True
+                                web_search_reason = "corp code generation failed - non-integer index"
+                        else: # generate_corp_code returned 'N/A' or None
+                             st.info("ℹ️ Could not determine company data in DART. Using web search instead.")
+                             if isinstance(corp_code_data_for_report, dict) and "raw_content" in corp_code_data_for_report: # Check if corp_code_data_for_report got any raw_content
+                                 st.expander("Raw LLM Output").write(corp_code_data_for_report["raw_content"])
+                             use_web_search = True
+                             web_search_reason = "corp code generation failed - N/A"
+
+                # Display metrics for Korean company after attempting corp_code generation
+                st.markdown("### 📊 Company Metrics (DART)")
+                col1_k, col2_k, col3_k = st.columns(3)
+                with col1_k: st.metric("Company Name", full_name)
+                with col2_k: st.metric("First Name", first_name)
+                with col3_k: st.metric("Corp Code", corp_code_value) # Shows N/A if not found
+
+                if use_web_search:
+                    report_source = 'web'
+                    report_data['report_source'] = report_source
+                    report_data['web_search_reason'] = web_search_reason
+                    try:
+                        with st.spinner("📊 Generating IM report using web search..."):
+                            report_content, images, _ = await dart_get_report(
+                                query=query_template, report_source=report_source, path=None
+                            )
+                        report_data['report'] = report_content
+                        report_data['images'] = images
+                        st.success("✅ Report generated using web search!")
+                    except Exception as dart_web_error:
+                        st.error(f"❌ Error generating DART report (web search): {str(dart_web_error)}")
+                        st.expander("Error Details").write(f"Full error: {write_multiline_text(traceback.format_exc())}")
+                        return
+                        report_data['report'] = f"Error generating report (web): {str(dart_web_error)}"
+                elif corp_code_value != 'N/A': # Proceed with DART documents only if corp_code was found
+                    st.info("✅ Company found in DART. Proceeding with DART filing download and report generation.")
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        try:
+                            with st.spinner("📄 Searching DART filings and downloading documents..."):
+                                doc_path = await dart_search(corp_code_value, temp_dir)
+
+                            if not doc_path:
+                                st.info("❌ Company data is not available in DART documents. Using web sources instead.")
+                                report_source = 'web' # Fallback to web
+                                report_data['report_source'] = report_source
+                                # Regenerate report with web source if docs not found
+                                with st.spinner("📊 Generating IM report using web search (fallback)..."):
+                                     report_content, images, _ = await dart_get_report(
+                                        query=query_template, report_source='web', path=None)
+                                     report_data['report'] = report_content
+                                     report_data['images'] = images
+                                     st.success("✅ Report generated using web search (fallback from no DART docs)!")
+
+                            else: # Documents found
+                                report_source = 'hybrid'
+                                report_data['report_source'] = report_source
+                                display_doc_path = os.path.relpath(doc_path, temp_dir)
+                                st.success(f"✅ DART documents processed. Path: {display_doc_path}")
+                                with st.expander("View Document Path", expanded=False): st.write(display_doc_path)
+
+                                with st.spinner("📊 Generating comprehensive IM report from DART docs..."):
+                                    report_content, images, _ = await dart_get_report(
+                                        query=query_template, report_source=report_source, path=doc_path
+                                    )
+                                report_data['report'] = report_content
+                                report_data['images'] = images
+                                st.success("✅ Success! Report generated using DART filings!")
+
+                        except Exception as dart_filing_error:
+                            st.error(f"❌ Error generating report from DART filings: {str(dart_filing_error)}")
+                            st.expander("Error Details").write(f"Full error: \n{write_multiline_text(traceback.format_exc())}")
+                            return
+                            report_data['report'] = f"Error generating report (DART filings): {str(dart_filing_error)}"
+                else: # Not using web search but corp_code_value is N/A - this case should be handled by web_search_reason
+                    st.warning("ℹ️ Could not proceed with DART document search as Corp Code was not identified.")
+                    report_data['report'] = "Could not obtain DART Corp Code for document search."
+
+
+            except Exception as dart_general_error:
+                st.error(f"❌ Error in DART filing process: {str(dart_general_error)}")
+                st.expander("Error Details").write(f"Full error: {write_multiline_text(traceback.format_exc())}")
+                return
+                report_data['report'] = f"Error in DART filing process: {str(dart_general_error)}"
+
+        st.session_state.report_to_display = report_data
+        if not any(existing_report['url'] == report_data['url'] and existing_report['language'] == report_data['language'] for existing_report in st.session_state.report_list):
+            st.session_state.report_list.append(report_data)
+        st.rerun()
+
+        # This image display seems redundant if display_report is called immediately after.
+        # However, if generate_report_flow is meant to update the main area directly:
+        if images:
+            st.subheader("🖼️ Report Images (from generation)")
+            for i, image_data in enumerate(images):
+                st.image(image_data, caption=f"Report Image {i + 1}")
+        # Calling display_report here if this function is responsible for the final main page update
+        # display_report(report_data) # Or rely on the main script logic to call display_report
+
+
+    except Exception as general_error:
+        st.error(f"❌ Unexpected error in report generation flow: {str(general_error)}")
+        st.expander("Error Details").write(f"Full error: {write_multiline_text(traceback.format_exc())}")
+        return
+        # Ensure report_data has some error message if an overarching error occurs
+        if 'report' not in report_data or not report_data['report'] :
+             report_data['report'] = f"Unexpected error in report generation: {str(general_error)}"
+        st.session_state.report_to_display = report_data # Display error info
+        # Optionally add to list for review
+        if not any(existing_report['url'] == report_data['url'] and existing_report['language'] == report_data['language'] for existing_report in st.session_state.report_list):
+            st.session_state.report_list.append(report_data)
 
 def display_report_details(report_data):
     """Displays the comprehensive report details in the main content area."""
@@ -208,69 +677,31 @@ def display_welcome_message():
     """)
 
 
-# --- Placeholder Functions for Agent Logic (to be implemented by you) ---
+# --- Helper Functions for Agent Logic ---
 
-def process_uploaded_file(uploaded_file):
-    """
-    Processes the uploaded file (e.g., extracts text, creates embeddings)
-    and initializes a chat object.
-    Returns a dictionary containing file info and the chat object.
-    """
-    if uploaded_file:
-        file_extension = os.path.splitext(uploaded_file.name)[1]
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
-            file_path = tmp_file.name
-            # Assuming process_files_and_get_chat_object initializes a chat session
-            # and that st.session_state.google_client is the correct client object.
-            chat_object = process_files_and_get_chat_object(file_path_list=[file_path], client=st.session_state.google_client)
-        st.success(f"Document '{uploaded_file.name}' processed and ready for chat.")
-        return {"name": uploaded_file.name, "path": file_path, "id": os.path.basename(file_path), 'chat_obj': chat_object}
-    return None
+# def process_uploaded_file(uploaded_file):
+#     """
+#     Processes the uploaded file (e.g., extracts text, creates embeddings)
+#     and initializes a chat object.
+#     Returns a dictionary containing file info and the chat object.
+#     """
+#     if uploaded_file:
+#         file_extension = os.path.splitext(uploaded_file.name)[1]
+#         with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as tmp_file:
+#             tmp_file.write(uploaded_file.getvalue())
+#             file_path = tmp_file.name
+#             tools_list = process_files_and_get_chat_object(file_path_list=[file_path], client=st.session_state.google_client)
+#         st.success(f"Document '{uploaded_file.name}' processed and ready for chat.")
+#         return {"name": uploaded_file.name, "path": file_path, "id": os.path.basename(file_path), 'tools_list': tools_list}
+#     return None
 
-def query_document_chat(processed_file_info, user_query):
-    """
-    Handles querying the processed document file with the user's input using the chat object.
-    Displays tool call queries and results if present.
-    """
-    if not processed_file_info or not processed_file_info.get('chat_obj'):
-        return "Please select a document file to chat with."
-
-    chat_obj = processed_file_info['chat_obj']
-    response_content = []
-    tool_interactions = []
-
-    try:
-        # Send the message and get the response
-        # The send_message method automatically handles tool calls and responses internally
-        # if the model is configured with tools.
-        result = chat_obj.send_message(user_query)
-
-        # Iterate through the parts of the response to display text and tool interactions
-        for part in result.candidates[0].content.parts:
-            if hasattr(part, 'text'):
-                response_content.append(part.text)
-            elif hasattr(part, 'function_call'):
-                # This indicates the model wants to call a tool
-                tool_call = part.function_call
-                tool_interactions.append(f"**Tool Call:** `Function: {tool_call.name}, Args: {tool_call.args}`")
-            elif hasattr(part, 'function_response'):
-                # This indicates the result of a tool call
-                tool_response = part.function_response
-                tool_interactions.append(f"**Tool Result for {tool_response.name}:** `{tool_response.response}`")
-
-    except Exception as e:
-        response_content.append(f"Error communicating with the AI: {str(e)}")
-        # In case of an error, ensure chat history is not corrupted
-        print(f"Error in query_document_chat: {e}")
-
-    # Combine tool interactions and AI's text response for display
-    final_display_text = ""
-    if tool_interactions:
-        final_display_text += "\n\n".join(tool_interactions) + "\n\n"
-    final_display_text += "\n".join(response_content)
-
-    return final_display_text
+# def create_chat_object(tools_list):
+#     client = st.session_state.google_client
+#     config = types.GenerateContentConfig(
+#         tools=tools_list
+#     )
+#     chat_object = client.chats.create(model=os.getenv("GEMINI_MODEL_NAME"),config=config)
+#     return chat_object
 
 
 # --- UI Rendering Functions (Pages) ---
@@ -279,12 +710,8 @@ def render_sidebar_navigation():
     st.sidebar.header("Navigation")
     if st.sidebar.button("📊 Report Generator", key="nav_report_gen"):
         navigate_to(PAGE_REPORT_GENERATOR)
-    if st.sidebar.button("🤖 SEC Agent Chat", key="nav_sec_chat"):
-        navigate_to(PAGE_SEC_CHAT)
-    # if st.sidebar.button("🇰🇷 DART Filings Agent Chat", key="nav_dart_chat"):
-    #     navigate_to(PAGE_DART_CHAT)
-    if st.sidebar.button("📄 Chat with DOCUMENT", key="nav_document_chat"):
-        navigate_to(PAGE_DOCUMENT_CHAT)
+    # if st.sidebar.button("🛠️ Chat with Tools",key="nav_chat_tools"):
+    #     navigate_to(PAGE_COMBINED_CHAT)
 
 def render_report_generator_page():
     """Renders the main Report Generator page content."""
@@ -296,7 +723,7 @@ def render_report_generator_page():
     # --- Section: Generate New Report ---
     st.header("✨ Generate New Report")
     with st.container(border=True):
-        col1, col2 = st.columns([1, 2])
+        col1, col2, col3 = st.columns([1, 2, 3])
 
         with col1:
             filings_selection = st.selectbox(
@@ -305,7 +732,7 @@ def render_report_generator_page():
                 index=["Global SEC filings", "Korean Dart fillings"].index(st.session_state.last_filings_selection)
             )
             language = "english" if filings_selection == "Global SEC filings" else "korean"
-            st.session_state.last_filings_selection = filings_selection # Update session state
+            st.session_state.last_filings_selection = filings_selection
 
         with col2:
             company_url = st.text_input(
@@ -313,7 +740,25 @@ def render_report_generator_page():
                 value=st.session_state.last_company_url,
                 placeholder="https://example.com"
             )
-            st.session_state.last_company_url = company_url # Update session state
+            st.session_state.last_company_url = company_url
+
+        with col3:
+            st.write("Select financial statement(s):")
+            income_stmt = st.checkbox("Income Statement",
+                                      value="Income Statement" in st.session_state.last_statement_types)
+            balance_sheet = st.checkbox("Balance Sheet", value="Balance Sheet" in st.session_state.last_statement_types)
+            cash_flow = st.checkbox("Cash Flow", value="Cash Flow" in st.session_state.last_statement_types)
+
+            statement_types = []
+            if income_stmt:
+                statement_types.append("Income Statement")
+            if balance_sheet:
+                statement_types.append("Balance Sheet")
+            if cash_flow:
+                statement_types.append("Cash Flow")
+
+            if statement_types != st.session_state.last_statement_types:
+                st.session_state.last_statement_types = statement_types
 
         generate_button = st.button("🚀 Generate Report", type="primary")
 
@@ -335,7 +780,7 @@ def render_report_generator_page():
                     set_report_to_display(existing_report)
             else:
                 try:
-                    asyncio.run(generate_report_flow_async(company_url, language))
+                    asyncio.run(generate_report_flow(company_url, language))
                 except Exception as e:
                     st.error(f"❌ An unexpected error occurred during report generation: {str(e)}")
                     st.exception(e)
@@ -347,16 +792,15 @@ def render_report_generator_page():
     if not st.session_state.report_list:
         st.info("No reports generated yet. Use the section above to create one!")
     else:
-        # Display button for each report in st.session_state.report_list
         for i, report_data in enumerate(st.session_state.report_list):
-            col1,col2, col3 = st.columns([2,1,1])
+            col1,col2, col3,col4 = st.columns([3,1,1,1])
             with col1:
                 company_full_name = report_data['company_data']['company_name'].replace(' ', '_').replace('/', '_').replace('\\', '_')
                 st.button(
                     f"View {company_full_name}_{report_data['language']} Report",
                     on_click=set_report_to_display,
                     args=(report_data,),
-                    key=f"view_report_{i}",  # Unique key for each view button
+                    key=f"view_report_{i}",
                     type="primary",
                     use_container_width=True
                 )
@@ -364,7 +808,7 @@ def render_report_generator_page():
                 company_full_name = report_data['company_data']['company_name'].replace(' ', '_').replace('/', '_').replace('\\', '_')
                 filename = f"{company_full_name}_{report_data['language']}_report.md"
                 st.download_button(
-                    label="📥 Download Report",
+                    label="📥 Download MD",
                     key=f"download_report_{i}",
                     data=report_data['report'],
                     file_name=filename,
@@ -372,158 +816,171 @@ def render_report_generator_page():
                     use_container_width=True
                 )
             with col3:
+                company_full_name = report_data['company_data']['company_name'].replace(' ', '_').replace('/', '_').replace('\\', '_')
+                report_text = report_data['report']
+                selected_language = report_data['language']
+                corp_code_data = report_data.get('corp_code_data', {}) if selected_language.lower() == "korean" else None
+                doc = markdown_to_docx(report_text, company_full_name, selected_language, corp_code_data)
+
+                # Save to bytes
+                doc_buffer = io.BytesIO()
+                doc.save(doc_buffer)
+                doc_buffer.seek(0)
+
+                filename_docx = f"{company_full_name}_{selected_language}_report.docx"
+                st.download_button(
+                    label="📄 Download DOCX",
+                    data=doc_buffer.getvalue(),
+                    file_name=filename_docx,
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    type="secondary",
+                    use_container_width=True
+                )
+            with col4:
                 st.button(
                     "❌ Remove",
                     on_click=remove_report_from_list,
                     args=(report_data,),
-                    key=f"delete_report_{i}",  # Unique key for each delete button
+                    key=f"delete_report_{i}",
                     use_container_width=True
                 )
     st.markdown("---")
 
-    # --- Section: Report Display Area ---
     if st.session_state.report_to_display:
         st.header("📊 Current Report Details")
-        display_report_details(st.session_state.report_to_display)
+        display_report(st.session_state.report_to_display)
         if st.button("Clear Report Display", help="Click to hide the currently displayed report details."):
             set_report_to_display(None)
     elif not generate_button and not st.session_state.report_to_display:
         display_welcome_message()
 
+# def combined_tools_chat_page():
+#     st.markdown("Upload a document and chat with its content using available tools.")
+#
+#     st.subheader("Upload Document")
+#     uploaded_file = st.file_uploader(
+#         "Choose a file to add its specific chat tool",
+#         type=["pdf", "txt", "csv", "docx", "xlsx"],
+#         key="file_uploader_combined"
+#     )
+#     if uploaded_file:
+#         existing_file_names = [file['name'] for file in st.session_state.uploaded_files]
+#         if uploaded_file.name not in existing_file_names:
+#             with st.spinner(f"Processing {uploaded_file.name}..."):
+#                 processed_info = process_uploaded_file(uploaded_file)
+#                 if processed_info:
+#                     st.session_state.uploaded_files.append(processed_info)
+#                 else:
+#                     st.error("Failed to process document.")
+#         else:
+#             st.info(f"Document '{uploaded_file.name}' is already uploaded and processed.")
+#
+#     st.subheader("Create and Select Chat")
+#
+#     # Prepare tool options for multiselect
+#     default_tool_names = ["Web Search Tool", "SEC Filings Search Tool"]
+#     available_tool_options = list(set(default_tool_names + [file['name'] for file in st.session_state.uploaded_files]))
+#
+#     # Determine default selections: all available tools
+#     current_selection = available_tool_options
+#
+#     selected_tools_names = st.multiselect(
+#         "Select the tools you want to use for your chat:",
+#         options=available_tool_options,
+#         default=current_selection # Select all available tools by default
+#     )
+#
+#     chat_name_input = st.text_input("Enter a name for this chat:", value=f"Chat {len(st.session_state.chat_objects) + 1}")
+#
+#     if st.button("Create Chat Object"):
+#         if not selected_tools_names:
+#             st.warning("Please select at least one tool to create a chat.")
+#         elif chat_name_input in st.session_state.chat_objects:
+#             st.warning(f"A chat with the name '{chat_name_input}' already exists. Please choose a different name.")
+#         else:
+#             # Collect the actual tool objects based on selected names
+#             tools_for_chat = []
+#             tool_names = []
+#             # Add tools from uploaded files
+#             for file_info in st.session_state.uploaded_files:
+#                 if file_info['name'] in selected_tools_names:
+#                     tool_names.append(file_info['name'])
+#                     tools_for_chat.extend(file_info['tools_list'])
+#
+#             if tools_for_chat:
+#                 new_chat_object = create_chat_object(tools_for_chat)
+#                 st.session_state.chat_objects[chat_name_input] = {'chat_object':new_chat_object, 'tool_names':tool_names}
+#                 st.session_state.selected_chat_name = chat_name_input # Automatically select the new chat
+#                 st.success(f"Chat '{chat_name_input}' created successfully!")
+#                 st.rerun() # Rerun to update the chat selection dropdown
+#             else:
+#                 st.error("No tools were available to create the chat. Please ensure tools are properly processed.")
+#
+#     # Divide the page into two columns
+#     col1, col2 = st.columns([1, 6]) # Adjust ratios as needed
+#
+#     with col1:
+#         st.subheader("Select Chat")
+#         if st.session_state.chat_objects:
+#             chat_names = list(st.session_state.chat_objects.keys())
+#             # Set default to the currently selected chat if it exists, otherwise the first one
+#             default_index = chat_names.index(st.session_state.selected_chat_name) if st.session_state.selected_chat_name in chat_names else 0
+#
+#             selected_chat_name_from_dropdown = st.radio(
+#                 "Choose a chat to interact with:",
+#                 options=chat_names,
+#                 index=default_index,
+#                 key="chat_selector"
+#             )
+#             if selected_chat_name_from_dropdown:
+#                 st.session_state.selected_chat_name = selected_chat_name_from_dropdown
+#         else:
+#             st.info("No chat objects available. Please create one.")
+#
+#     with col2:
+#         if st.session_state.selected_chat_name:
+#             current_chat = st.session_state.chat_objects[st.session_state.selected_chat_name]['chat_object']
+#             tools_used = st.session_state.chat_objects[st.session_state.selected_chat_name]['tool_names']
+#
+#             # Display chat history for the selected chat
+#             new_line_string = "\n\n"
+#             tools_name_string = ", ".join(tools_used)
+#             st.subheader(f"Chat with {st.session_state.selected_chat_name}{new_line_string}{tools_name_string}")
+#             chat_history = current_chat.get_history()
+#             for message in chat_history:
+#                 message_role = message.role
+#                 if message_role == 'model':
+#                     message_role = 'ai'
+#                 text_message = message.parts[0].text
+#                 if text_message:
+#                     with st.chat_message(message_role):
+#                         st.write(text_message)
+#                 function_call_message = message.parts[0].function_call
+#                 if function_call_message:
+#                     function_call_name = function_call_message.name
+#                     function_call_args = function_call_message.args
+#                     with st.expander(f"⚙️ Tool Call: {function_call_name}", expanded=False):
+#                         st.json(function_call_args)
+#                 function_response_message = message.parts[0].function_response
+#                 if function_response_message:
+#                     function_response_name = function_response_message.name
+#                     function_response_result = function_response_message.response
+#                     with st.expander(f"✅ Tool Result for {function_response_name}", expanded=False):
+#                         st.json(function_response_result)
+#
+#
+#
+#             user_query = st.chat_input(f"Ask your query to '{st.session_state.selected_chat_name}':", key="chat_input_combined")
+#             if user_query:
+#                 with st.spinner("Getting answer..."):
+#                     answer = current_chat.send_message(user_query)
+#                 if not answer:
+#                     answer = "Failed to get an answer from this chat."
+#                 st.rerun() # Rerun to display the new message
+#         else:
+#             st.info("Please select or create a chat object to start chatting.")
 
-def sec_agent_chat_page():
-    """Renders the SEC Agent Chat page."""
-    st.title("🤖 SEC Agent Chat")
-    st.markdown("Chat with an AI agent knowledgeable about **SEC filings**.")
-
-    for query_answer in st.session_state.sec_agent_query_answer:
-        with st.container(border=True):
-            with st.chat_message('user'):
-                st.write(query_answer['query'])
-            with st.chat_message('assistant'):
-                st.write(query_answer['answer'])
-    
-    user_query = st.chat_input("Ask me any query regarding SEC filings:")
-    if user_query:
-        with st.container(border=True):
-            with st.chat_message("user"):
-                st.write(user_query)
-            with st.spinner("Getting answer from SEC Agent"):
-                answer = asyncio.run(run_agent(user_query))
-            if not answer:
-                answer = "Failed to get answer from agent"
-            new_query_answer = {'query':user_query, 'answer':answer}
-            st.session_state.sec_agent_query_answer.append(new_query_answer)
-            st.rerun()
-
-def dart_agent_chat_page():
-    """Renders the DART Filings Agent Chat page."""
-    st.title("🇰🇷 DART Filings Agent Chat")
-    st.markdown("Chat with an AI agent knowledgeable about **Korean DART filings**.")
-    st.info("*(This page is under construction. Your DART chat logic will go here.)*")
-
-    # Example chat input (you'll integrate your LLM logic here)
-    user_query = st.text_input("Ask me about DART filings:")
-    if user_query:
-        st.write(f"**You:** {user_query}")
-        st.write(f"**DART Agent:** (Simulated response) I can help you understand information from DART reports.")
-        # Your actual DART chat agent logic would go here.
-        # For example: response = your_dart_agent.query(user_query)
-        # st.write(response)
-
-def document_chat_page():
-    """Renders the Chat with Document page."""
-    st.title("📄 Chat with Your Document")
-    st.markdown("Upload a document and chat with its content.")
-
-    # Document Upload Section
-    st.subheader("Upload Document")
-    uploaded_file = st.file_uploader(
-        "Choose a file",
-        type=["pdf", "txt", "csv", "docx", "xlsx"],
-        key="file_uploader"
-    )
-    if uploaded_file:
-        existing_file_names = [file['name'] for file in st.session_state.uploaded_files]
-        if uploaded_file.name not in existing_file_names:
-            with st.spinner(f"Processing {uploaded_file.name}..."):
-                processed_info = process_uploaded_file(uploaded_file)
-                if processed_info:
-                    st.session_state.uploaded_files.append(processed_info)
-                    st.session_state.selected_file_for_chat = processed_info
-                    # Initialize chat history for this new document
-                    st.session_state.chat_histories[processed_info['id']] = []
-                else:
-                    st.error("Failed to process document.")
-        else:
-            st.info(f"Document '{uploaded_file.name}' is already uploaded and processed.")
-            st.session_state.selected_file_for_chat = next(
-                (f for f in st.session_state.uploaded_files if f['name'] == uploaded_file.name), None
-            )
-
-    # Select Document to Chat With
-    st.subheader("Select Document to Chat With")
-    if st.session_state.uploaded_files:
-        file_names = [file['name'] for file in st.session_state.uploaded_files]
-        selected_name = st.selectbox(
-            "Choose a processed document:",
-            options=["-- Select a Document --"] + file_names,
-            index=0 if not st.session_state.selected_file_for_chat else
-                  (file_names.index(st.session_state.selected_file_for_chat['name']) + 1 if st.session_state.selected_file_for_chat['name'] in file_names else 0),
-            key="file_selector"
-        )
-
-        # Update selected_file_for_chat based on dropdown selection
-        if selected_name != "-- Select a Document --":
-            newly_selected_file = next(
-                (file for file in st.session_state.uploaded_files if file['name'] == selected_name), None
-            )
-            if newly_selected_file and newly_selected_file != st.session_state.selected_file_for_chat:
-                st.session_state.selected_file_for_chat = newly_selected_file
-                # Ensure chat history is initialized for the newly selected document
-                if newly_selected_file['id'] not in st.session_state.chat_histories:
-                    st.session_state.chat_histories[newly_selected_file['id']] = []
-                st.success(f"You are now chatting with: **{st.session_state.selected_file_for_chat['name']}**")
-                # Rerun to clear chat input and display relevant history
-                st.rerun()
-        else:
-            st.session_state.selected_file_for_chat = None
-
-    else:
-        st.info("Upload a document above to begin chatting with it.")
-
-    # Chat Interface
-    st.subheader("Chat Interface")
-    if st.session_state.selected_file_for_chat:
-        current_file_id = st.session_state.selected_file_for_chat['id']
-
-        # Display chat messages from history
-        for message in st.session_state.chat_histories[current_file_id]:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-
-        user_query = st.chat_input("Ask a question about the document:", key="document_chat_query")
-
-        if user_query:
-            # Add user message to chat history
-            st.session_state.chat_histories[current_file_id].append({"role": "user", "content": user_query})
-            with st.chat_message("user"):
-                st.markdown(user_query)
-
-            with st.spinner("Getting response..."):
-                response_content = query_document_chat(st.session_state.selected_file_for_chat, user_query)
-
-            # Add AI response to chat history
-            st.session_state.chat_histories[current_file_id].append({"role": "assistant", "content": response_content})
-            with st.chat_message("assistant"):
-                st.markdown(response_content)
-
-            st.rerun() # Rerun to update the chat display
-    else:
-        st.info("Select a document from the list above to start chatting.")
-
-
-# --- Core Report Generation Logic (Moved from main, unchanged) ---
+# --- Core Report Generation Logic (Unchanged) ---
 
 async def generate_report_flow_async(company_url_input, selected_language):
     """
@@ -553,6 +1010,12 @@ async def generate_report_flow_async(company_url_input, selected_language):
         st.error("❌ Company name could not be determined. Cannot proceed.")
         return
 
+    statement_type = st.session_state.last_statement_types
+    if statement_type:
+        finanace_report = f"Also Add {statement_type} in detail"
+    else:
+        finanace_report = ""
+
     english_query_template = f"""As an investment associate, draft an information memorandum for company: {full_name}
     Information of Company: {company_data}
     ADD These in table of contents:
@@ -568,6 +1031,8 @@ async def generate_report_flow_async(company_url_input, selected_language):
     5.Business Segments Deep Dive
     6.Industry Overview and Competitive Positioning
     7.Financial Performance Analysis
+        Revenue
+        {finanace_report}
     8.Management and Corporate Governance
     9.Strategic Initiatives and Future Growth Drivers
     10.Risk Factors
@@ -591,6 +1056,8 @@ async def generate_report_flow_async(company_url_input, selected_language):
     5. 사업 부문 심층 분석
     6. 산업 개요 및 경쟁적 포지셔닝
     7. 재무 성과 분석
+        수익
+        {finanace_report}
     8. 경영진 및 기업 지배구조
     9. 전략적 이니셔티브 및 미래 성장 동력
     10. 위험 요소
@@ -602,7 +1069,6 @@ async def generate_report_flow_async(company_url_input, selected_language):
     images = []
     logs = ""
 
-    # Placeholder for dynamic logs and report display during generation
     with st.expander('📊 Research Logs', expanded=True):
         logs_container = st.empty()
         logs_container.info("Logs will appear here as the research progresses...")
@@ -673,7 +1139,7 @@ async def generate_report_flow_async(company_url_input, selected_language):
                 st.success("✅ DART Corporation code generated.")
                 corp_code_value = corp_code_data['corp_code']
 
-        report_source = 'web' if use_web_search else 'hybrid' # Default to hybrid if DART data found
+        report_source = 'web' if use_web_search else 'hybrid'
         report_data['report_source'] = report_source
         report_data['web_search_reason'] = web_search_reason
 
@@ -685,7 +1151,7 @@ async def generate_report_flow_async(company_url_input, selected_language):
 
                 if not doc_path:
                     st.info("❌ Company data is not available in DART documents. Using web sources instead.")
-                    report_source = 'web' # Override to web if no documents found
+                    report_source = 'web'
                     report_data['report_source'] = report_source
                 else:
                     st.success(f"✅ DART documents processed.")
@@ -704,43 +1170,24 @@ async def generate_report_flow_async(company_url_input, selected_language):
     report_data['images'] = images
     report_data['logs'] = logs
 
-    # Append to report list and set for display
     st.session_state.report_list.append(report_data)
     st.session_state.report_to_display = report_data
     st.rerun()
 
 
 # --- Main Application Runner ---
-
+#Comment tool part
 def main():
     """Main function to run the Streamlit application."""
     setup_page_config()
     init_session_state()
 
-    # Render sidebar navigation first
-    # render_sidebar_navigation()
-    st.session_state.current_page = PAGE_REPORT_GENERATOR
+    render_sidebar_navigation()
 
-    # Determine which page to display based on session state
     if st.session_state.current_page == PAGE_REPORT_GENERATOR:
         render_report_generator_page()
-    elif st.session_state.current_page == PAGE_SEC_CHAT:
-        sec_agent_chat_page()
-    elif st.session_state.current_page == PAGE_DART_CHAT:
-        dart_agent_chat_page()
-    elif st.session_state.current_page == PAGE_DOCUMENT_CHAT:
-        document_chat_page()
-
-    # Footer always at the bottom
-    # st.markdown("---")
-    # st.markdown(
-    #     """
-    #     <div style='text-align: center'>
-    #         <p>IM Report Generator | Powered by doAZ</p>
-    #     </div>
-    #     """,
-    #     unsafe_allow_html=True
-    # )
+    # elif st.session_state.current_page == PAGE_COMBINED_CHAT:
+    #     combined_tools_chat_page()
 
 if __name__ == "__main__":
     main()
