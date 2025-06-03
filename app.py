@@ -1176,7 +1176,7 @@ async def generate_report_flow_async(company_url_input, selected_language):
 
 
 # --- Main Application Runner ---
-
+#Comment tool part
 def main():
     """Main function to run the Streamlit application."""
     setup_page_config()
