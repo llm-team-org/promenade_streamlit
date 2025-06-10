@@ -498,9 +498,33 @@ async def generate_report_flow(company_url_input, selected_language):
                                 report_source = 'hybrid'
                                 report_data['report_source'] = report_source
                                 display_doc_path = os.path.relpath(doc_path, temp_dir)
+                                dart_refeerences_files=os.listdir(doc_path)
                                 st.success(f"✅ DART documents processed. Path: {display_doc_path}")
                                 with st.expander("View Document Path", expanded=False): st.write(display_doc_path)
 
+                                with st.expander("View download files", expanded=False):
+                                    st.write(dart_refeerences_files)
+                                    for file in dart_refeerences_files:
+                                        if file.endswith('.txt'):
+                                            file_path = os.path.join(doc_path, file)
+
+                                            col1, col2 = st.columns([3, 1])
+
+                                            with col1:
+                                                st.write(f"📄 {file}")
+
+                                            with col2:
+                                                with open(file_path, 'r', encoding='utf-8') as f:
+                                                    file_content = f.read()
+
+                                                st.download_button(
+                                                    label="⬇️",
+                                                    data=file_content,
+                                                    file_name=file,
+                                                    mime='text/plain',
+                                                    key=f"download_{file}"  # Unique key for each button
+                                                )
+                                query_template=query_template+ f"-Add these references as fell {dart_refeerences_files}"
                                 with st.spinner("📊 Generating comprehensive IM report from DART docs..."):
                                     report_content, images, _ = await dart_get_report(
                                         query=query_template, report_source=report_source, path=doc_path
