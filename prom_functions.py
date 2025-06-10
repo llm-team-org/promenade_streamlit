@@ -566,21 +566,19 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
             Table format should be like this: {table_format}
             if you dont have any value for them then write "N/A" in table. 
             if Corporate History data is not available of some years then just write those which are available.
-            
-            Generate in English language
             """
     if path:
         os.environ['DOC_PATH'] = path  # GPTResearcher might pick this up
         researcher = GPTResearcher(query=query, report_type="research_report", report_source="hybrid",
-                                   config_path="config.json")
-        researcher.cfg.load_config("config.json")  # Or path to your config file
+                                   config_path="config_kr.json")
+        researcher.cfg.load_config("config_kr.json")  # Or path to your config file
         await researcher.conduct_research()
         report = await researcher.write_report()
         research_images = []
         return report, research_images, ""
     else:
-        researcher = GPTResearcher(query=query, report_type="research_report",config_path="config.json")
-        researcher.cfg.load_config("config.json")
+        researcher = GPTResearcher(query=query, report_type="research_report",config_path="config_kr.json")
+        researcher.cfg.load_config("config_kr.json")
         await researcher.conduct_research()
         report = await researcher.write_report()
         research_images = []
