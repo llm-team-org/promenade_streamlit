@@ -495,12 +495,13 @@ async def generate_report_flow(company_url_input, selected_language):
                                      st.success("✅ Report generated using web search (fallback from no DART docs)!")
 
                             else: # Documents found
-                                dart_references_files=os.listdir(doc_path)
                                 report_source = 'hybrid'
                                 report_data['report_source'] = report_source
                                 display_doc_path = os.path.relpath(doc_path, temp_dir)
                                 st.success(f"✅ DART documents processed. Path: {display_doc_path}")
                                 with st.expander("View Document Path", expanded=False): st.write(display_doc_path)
+                                dart_references_files=os.listdir(display_doc_path)
+                                st.success(f"✅ DART documents processed. Path: {dart_references_files}")
 
                                 with st.expander("View download files", expanded=False): st.write(dart_references_files)
                                     # for file in dart_references_files:
