@@ -338,7 +338,7 @@ async def generate_report_flow(company_url_input, selected_language):
         10.Risk Factors 
         11.Investment Considerations
         12.Conclusion
-        13.References (Annual Report filing,Accurate and Authentic)
+        13.References (Filings Annual Report, Accurate and Authentic)
         
         -Add Tables: Display structured data like numbers, dates, comparisons, or lists in a table with headers, then summarize its main takeaways. For other content, use bullet points or numbered lists.
 
