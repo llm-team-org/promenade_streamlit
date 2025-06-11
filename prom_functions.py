@@ -560,7 +560,8 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
     #     return "Error: Document path not available for DART report generation.", [], ""
     query= f"""
             Use this tone for report generation : Simple/Factual tone
-            {query}
+            {query} 
+            -In References, Must include Dart fss **ANNUAL REPORT** filing of company.
             
             For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value.
             Table format should be like this: {table_format}

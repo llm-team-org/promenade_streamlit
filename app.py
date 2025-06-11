@@ -338,7 +338,7 @@ async def generate_report_flow(company_url_input, selected_language):
         10.Risk Factors 
         11.Investment Considerations
         12.Conclusion
-        13.References (Accurate and Authentic)
+        13.References (Annual filing Report,Accurate and Authentic)
         
         -Add Tables: Display structured data like numbers, dates, comparisons, or lists in a table with headers, then summarize its main takeaways. For other content, use bullet points or numbered lists.
 
@@ -497,9 +497,38 @@ async def generate_report_flow(company_url_input, selected_language):
                             else: # Documents found
                                 report_source = 'hybrid'
                                 report_data['report_source'] = report_source
+                                #st.success(f"✅ DART documents Saved. Path: {doc_path}")
+                                #with st.expander("View Document", expanded=False): st.write(doc_path)
+
                                 display_doc_path = os.path.relpath(doc_path, temp_dir)
                                 st.success(f"✅ DART documents processed. Path: {display_doc_path}")
+
+                                #dart_references_files=os.listdir(doc_path)
+                                #st.success(f"✅ DART documents processed. Files: {dart_references_files}")
+
                                 with st.expander("View Document Path", expanded=False): st.write(display_doc_path)
+                                #with st.expander("View download files", expanded=False):
+                                    #st.write(dart_references_files)
+                                    # for file in dart_references_files:
+                                    #     if file.endswith('.txt'):
+                                    #         file_path = os.path.join(doc_path, file)
+                                    #
+                                    #         col1, col2 = st.columns([3, 1])
+                                    #
+                                    #         with col1:
+                                    #             st.write(f"📄 {file}")
+                                    #
+                                    #         with col2:
+                                    #             with open(file_path, 'r', encoding='utf-8') as f:
+                                    #                 file_content = f.read()
+                                    #
+                                    #             st.download_button(
+                                    #                 label="⬇️",
+                                    #                 data=file_content,
+                                    #                 file_name=file,
+                                    #                 mime='text/plain',
+                                    #                 key=f"download_{file}"  # Unique key for each button
+                                    #             )
 
                                 with st.spinner("📊 Generating comprehensive IM report from DART docs..."):
                                     report_content, images, _ = await dart_get_report(
