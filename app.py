@@ -497,13 +497,18 @@ async def generate_report_flow(company_url_input, selected_language):
                             else: # Documents found
                                 report_source = 'hybrid'
                                 report_data['report_source'] = report_source
+                                st.success(f"✅ DART documents Saved. Path: {doc_path}")
+                                with st.expander("View Document", expanded=False): st.write(doc_path)
+
                                 display_doc_path = os.path.relpath(doc_path, temp_dir)
                                 st.success(f"✅ DART documents processed. Path: {display_doc_path}")
-                                with st.expander("View Document Path", expanded=False): st.write(display_doc_path)
-                                dart_references_files=os.listdir(display_doc_path)
+
+                                dart_references_files=os.listdir(doc_path)
                                 st.success(f"✅ DART documents processed. Path: {dart_references_files}")
 
                                 with st.expander("View download files", expanded=False): st.write(dart_references_files)
+                                with st.expander("View Document Path", expanded=False): st.write(display_doc_path)
+
                                     # for file in dart_references_files:
                                     #     if file.endswith('.txt'):
                                     #         file_path = os.path.join(doc_path, file)

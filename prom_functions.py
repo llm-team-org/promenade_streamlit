@@ -561,7 +561,7 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
     query= f"""
             Use this tone for report generation : Simple/Factual tone
             {query} 
-
+            
             For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value.
             Table format should be like this: {table_format}
             if you dont have any value for them then write "N/A" in table. 
