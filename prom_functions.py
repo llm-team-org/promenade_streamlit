@@ -561,6 +561,7 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
     query= f"""
             Use this tone for report generation : Simple/Factual tone
             {query} 
+            -Must Use Dart fss filing references for the corporation if you find any in korean dart website or in en.dart.fss website
             
             For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value.
             Table format should be like this: {table_format}
