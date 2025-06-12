@@ -338,7 +338,7 @@ async def generate_report_flow(company_url_input, selected_language):
         10.Risk Factors 
         11.Investment Considerations
         12.Conclusion
-        13.References (Annual filing Report,Accurate and Authentic)
+        13.References (Filings Annual Report, Accurate and Authentic)
         
         -Add Tables: Display structured data like numbers, dates, comparisons, or lists in a table with headers, then summarize its main takeaways. For other content, use bullet points or numbered lists.
 
@@ -1067,7 +1067,7 @@ async def generate_report_flow_async(company_url_input, selected_language):
     10.Risk Factors
     11.Investment Considerations
     12.Conclusion
-    13.References
+    13.References (Annual Report filing,Accurate and Authentic)
     """
 
     korean_query_template = f"""투자 담당자로서 회사 {full_name}에 대한 정보 메모를 작성하십시오.
@@ -1092,7 +1092,7 @@ async def generate_report_flow_async(company_url_input, selected_language):
     10. 위험 요소
     11. 투자 고려 사항
     12. 결론
-    13. 참고 문헌
+    13. 참고문헌(연간 보고서 제출, 정확하고 진실함)
     """
     report = ""
     images = []

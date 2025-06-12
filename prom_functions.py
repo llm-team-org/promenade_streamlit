@@ -558,17 +558,18 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
     """Generate DART report using GPTResearcher asynchronously."""
     # if not path: # Handle case where dart_search might have returned None
     #     return "Error: Document path not available for DART report generation.", [], ""
-    query= f"""
-            Use this tone for report generation : Simple/Factual tone
-            {query} 
-            -In References, Must include Dart fss **ANNUAL REPORT** filing of company.
-            
-            For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value.
-            Table format should be like this: {table_format}
-            if you dont have any value for them then write "N/A" in table. 
-            if Corporate History data is not available of some years then just write those which are available.
-            """
+
     if path:
+        query = f"""
+                Use this tone for report generation : Simple/Factual tone
+                {query} 
+                -In References, Must include Dart fss **ANNUAL REPORT** filing of company.
+
+                For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value.
+                Table format should be like this: {table_format}
+                if you dont have any value for them then write "N/A" in table. 
+                if Corporate History data is not available of some years then just write those which are available.
+                """
         os.environ['DOC_PATH'] = path  # GPTResearcher might pick this up
         researcher = GPTResearcher(query=query, report_type="research_report", report_source="hybrid",
                                    config_path="config_kr.json")
@@ -578,6 +579,15 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
         research_images = []
         return report, research_images, ""
     else:
+        query = f"""
+                Use this tone for report generation : Simple/Factual tone
+                {query} 
+                
+                For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value.
+                Table format should be like this: {table_format}
+                if you dont have any value for them then write "N/A" in table. 
+                if Corporate History data is not available of some years then just write those which are available.
+                """
         researcher = GPTResearcher(query=query, report_type="research_report",config_path="config_kr.json")
         researcher.cfg.load_config("config_kr.json")
         await researcher.conduct_research()
