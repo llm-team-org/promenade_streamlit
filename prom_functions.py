@@ -12,11 +12,6 @@ import pandas as pd  # Assuming fs[i] is a pandas DataFrame for to_csv
 from typing import Dict, Any
 import streamlit as st
 import uuid
-from langchain_community.document_loaders import TextLoader
-from langchain.chains import LLMChain, StuffDocumentsChain
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain.tools import Tool
-from langchain.chat_models import init_chat_model
 
 from dotenv import load_dotenv
 
@@ -139,7 +134,7 @@ tools = [{
         "parameters": {
             "type": "object",
             "properties": {
-                "url": {  # Parameter name changed from 'prompt' to 'query' to match tavily_web_search signature
+                "query": {  # Parameter name changed from 'prompt' to 'query' to match tavily_web_search signature
                     "type": "string",
                     "description": "Web Search query"
                 }
@@ -489,7 +484,7 @@ async def dart_search(corp_code, temp_dir):
         return None  # Indicate failure
 
     try:
-        fs_results = await asyncio.to_thread(company.extract_fs, bgn_de='20200101',report_tp="annual",dataset="web",last_report_only=False)
+        fs_results = await asyncio.to_thread(company.extract_fs, bgn_de='20200101')
     except Exception as e:
         return None
 
@@ -617,4 +612,3 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
 
     # MODIFIED: Return empty string for logs since streaming is disabled
     # return report, research_images, ""
-
