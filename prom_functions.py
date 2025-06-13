@@ -139,7 +139,7 @@ tools = [{
         "parameters": {
             "type": "object",
             "properties": {
-                "url": {  # Parameter name changed from 'prompt' to 'query' to match tavily_web_search signature
+                "query": {  # Parameter name changed from 'prompt' to 'query' to match tavily_web_search signature
                     "type": "string",
                     "description": "Web Search query"
                 }
