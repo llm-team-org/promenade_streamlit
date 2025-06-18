@@ -12,6 +12,11 @@ import pandas as pd  # Assuming fs[i] is a pandas DataFrame for to_csv
 from typing import Dict, Any
 import streamlit as st
 import uuid
+from langchain_community.document_loaders import TextLoader
+from langchain.chains import LLMChain, StuffDocumentsChain
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain.tools import Tool
+from langchain.chat_models import init_chat_model
 
 from dotenv import load_dotenv
 
@@ -416,7 +421,7 @@ async def sec_search(company_name,ticker):
     fullTextSearchApi = FullTextSearchApi(api_key=SEC_API_KEY)
     query = {
         "query": f"{company_name} {ticker}",
-        "formTypes": ['10-K'],
+        "formTypes": ['10-K','8-K','20-F','10-Q'],
         "startDate": '2020-01-01',
     }
     # Run synchronous SDK call in a thread
@@ -430,7 +435,9 @@ async def sec_get_report(query: str, report_type: str, sources: list) -> tuple[s
     # COMMENTED OUT: StreamlitLogHandler for streaming logs
     # logs_handler = StreamlitLogHandler(logs_container, report_container)
 
-    query= query + "-Add SEC filings references as well in references"
+
+    query= query + f"-Add these SEC filings references from source url '{sources}' as well in references"
+
     # MODIFIED: Removed websocket parameter (streaming handler)
     researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
                                config_path="config.json")
@@ -484,7 +491,7 @@ async def dart_search(corp_code, temp_dir):
         return None  # Indicate failure
 
     try:
-        fs_results = await asyncio.to_thread(company.extract_fs, bgn_de='20200101')
+        fs_results = await asyncio.to_thread(company.extract_fs, bgn_de='20200101',report_tp="annual",dataset="web",last_report_only=False)
     except Exception as e:
         return None
 
@@ -515,26 +522,28 @@ async def dart_search(corp_code, temp_dir):
 
 
 table_format="""
-| **Business #**         | {BusinessNumber}            | **Corp Registration #**  | {CorpRegistrationNumber}      |
-|-----------------------|-----------------------------|--------------------------|------------------------------|
-| **CEO Name**           | {CEOName}                   | **Incorporation Date**    | {IncorporationDate}           |
-| **Capital Stock**      | {CapitalStock}              | **# of Employees**        | {NumberOfEmployees}           |
-| **Major Shareholders** | {MajorShareholders}         | **Company Type**          | {CompanyType}                 |
-| **Financial Audit**    | {FinancialAudit}            |                          |                              |
-| **Line of Business**   | {LineOfBusiness}            |                          |                              |
-| **Address**            | {Address}                   |                          |                              |
-| **Year** | **Corporate History Details**          |
-|----------|--------------------------------------|
-| 2025     | {History_2025}                       |
-| 2023     | {History_2023}                       |
-| 2021     | {History_2021}                       |
-| 2017     | {History_2017}                       |
-| 2010     | {History_2010}                       |
-| 2000     | {History_2000}                       |
-| 1993     | {History_1993}                       |
-| 1980s    | {History_1980s}                      |
-| 1970     | {History_1970}                       |
-| 1969     | {History_1969}                       |
+
+| **Business #**         | {BusinessNumber}            | **Corp Registration #**  | {CorpRegistrationNumber}    |
+|------------------------|-----------------------------|--------------------------|-----------------------------|
+| **CEO Name**           | {CEOName}                   | **Incorporation Date**   | {IncorporationDate}         |
+| **Capital Stock**      | {CapitalStock}              | **# of Employees**       | {NumberOfEmployees}         |
+| **Major Shareholders** | {MajorShareholders}         | **Company Type**         | {CompanyType}               |
+| **Financial Audit**    | {FinancialAudit}            |                          |                             |
+| **Line of Business**   | {LineOfBusiness}            |                          |                             |
+| **Address**            | {Address}                   |                          |                             |
+
+
+| **Year** | **Corporate History Details**(If available)|
+|----------|--------------------------------------------|
+| 2025     | {History_2025}                             |
+| 2023     | {History_2023}                             |
+| 2021     | {History_2021}                             |
+| 2017     | {History_2017}                             |
+| 2010     | {History_2010}                             |
+| 2000     | {History_2000}                             |
+| 1993     | {History_1993}                             |
+| 1980s    | {History_1980s}                            |
+
 """
 table_data="""
 
@@ -570,17 +579,39 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
             Generate in English language
             """
     if path:
+        query = f"""
+                Use this tone for report generation : Simple/Factual tone
+                {query} 
+                -In References, Must include Dart fss **ANNUAL REPORT** filing of company.
+
+                For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value.
+                Table format should be like this: {table_format}
+                if you dont have any value for them then write "N/A" in table. 
+                if Corporate History data is not available of some years then just write those which are available.
+                """
         os.environ['DOC_PATH'] = path  # GPTResearcher might pick this up
         researcher = GPTResearcher(query=query, report_type="research_report", report_source="hybrid",
-                                   config_path="config.json")
-        researcher.cfg.load_config("config.json")  # Or path to your config file
+                                   config_path="config_kr.json")
+        researcher.cfg.load_config("config_kr.json")  # Or path to your config file
+
         await researcher.conduct_research()
         report = await researcher.write_report()
         research_images = []
         return report, research_images, ""
     else:
-        researcher = GPTResearcher(query=query, report_type="research_report",config_path="config.json")
-        researcher.cfg.load_config("config.json")
+
+        query = f"""
+                Use this tone for report generation : Simple/Factual tone
+                {query} 
+                
+                For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value.
+                Table format should be like this: {table_format}
+                if you dont have any value for them then write "N/A" in table. 
+                if Corporate History data is not available of some years then just write those which are available.
+                """
+        researcher = GPTResearcher(query=query, report_type="research_report",config_path="config_kr.json")
+        researcher.cfg.load_config("config_kr.json")
+
         await researcher.conduct_research()
         report = await researcher.write_report()
         research_images = []
@@ -603,3 +634,6 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
 
     # MODIFIED: Return empty string for logs since streaming is disabled
     # return report, research_images, ""
+
+
+

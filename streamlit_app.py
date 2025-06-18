@@ -1,4 +1,10 @@
+
 import streamlit as st
+
+sel_options = st.multiselect("Hello", options=["Apple", "Orange"])
+
+st.write(sel_options)
+
 from prom_functions import (
     generate_company_information,
     generate_corp_code,
@@ -732,3 +738,4 @@ st.markdown(
     </div>
     """,
     unsafe_allow_html=True)
+
