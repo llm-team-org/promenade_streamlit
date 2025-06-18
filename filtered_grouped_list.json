@@ -33589,6 +33589,17 @@
             }
         ]
     },
+      {
+        "group_name": "테크윙",
+        "count": 1,
+        "entries": [
+            {
+                "index": 101944,
+                "name": "테크윙",
+                "corp_code": "00535676"
+            }
+        ]
+    },
     {
         "group_name": "디앤디",
         "count": 2,
