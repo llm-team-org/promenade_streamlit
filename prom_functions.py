@@ -486,7 +486,7 @@ async def dart_search(corp_code, temp_dir):
         return None  # Indicate failure
 
     try:
-        fs_results = await asyncio.to_thread(company.extract_fs, bgn_de='20200101')
+        fs_results = await asyncio.to_thread(company.extract_fs, bgn_de='20200101',report_tp="annual",dataset="web",last_report_only=False)
     except Exception as e:
         return None
 
