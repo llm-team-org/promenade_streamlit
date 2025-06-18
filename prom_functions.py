@@ -408,6 +408,7 @@ async def short_list(company_name, company_first_name):
     # Fixed the condition: changed 'short_list' to 'short_lists'
     if short_lists:
         try:
+            dart.set_api_key(api_key=DART_API_KEY)
             corp_info = dart.api.filings.get_corp_info(corp_code=short_lists[0]['corp_code'])
         except Exception as e:
             print(f"Error getting corp info: {type(e).__name__}: {e}")
