@@ -397,11 +397,12 @@ async def generate_report_flow(company_url_input, selected_language):
                     company_first_name_for_dart = first_name if first_name != 'N/A' else full_name.split(" ")[0]
                     # Using get_dart_company_information as per new script
                     #corp_short_list_data = await get_dart_company_information(full_name, company_first_name_for_dart)
-                    corp_short_list_data = await short_list(full_name, company_first_name_for_dart)
-                    with st.expander("Corp Data", expanded=False): st.write(corp_short_list_data)
+                    corp_short_list_data, corp_info = await short_list(full_name, company_first_name_for_dart)
+                    with st.expander("Corp Data", expanded=False): st.write(corp_info)
 
                     try:
-                        corp_code=corp_short_list_data['corp_code']
+                        corp_code=corp_info['corp_code']
+                        st.info(f"✅ Company corp code is {corp_code}")
                     except:
                         corp_code=None
                     report_data['corp_short_list_data'] = corp_short_list_data
@@ -1145,9 +1146,9 @@ async def generate_report_flow_async(company_url_input, selected_language):
 
         with st.spinner("📝 Generating company short list for DART..."):
             company_first_name_for_dart = first_name if first_name != 'N/A' else full_name.split(" ")[0]
-            corp_short_list_data = await short_list(full_name, company_first_name_for_dart)
+            corp_short_list_data, corp_info = await short_list(full_name, company_first_name_for_dart)
             try:
-                corp_code=corp_short_list_data['corp_code']
+                corp_code=corp_info['corp_code']
             except:
                 corp_code=None
             report_data['corp_short_list_data'] = corp_short_list_data
@@ -1169,7 +1170,7 @@ async def generate_report_flow_async(company_url_input, selected_language):
             with st.spinner("🔢 Generating DART corporation code..."):
                 # corp_code_data = await generate_corp_code(full_name, corp_short_list_data)
                 corp_code_data=corp_code
-                # report_data['corp_code_data'] = corp_code_data
+                report_data['corp_code_data'] = corp_code_data
 
             if not corp_code_data or "error" in corp_code_data or corp_code_data.get('corp_code') == 'N/A':
                 st.info("ℹ️ Could not find company data in DART. Using web search instead.")

@@ -413,7 +413,7 @@ async def short_list(company_name, company_first_name):
             print(f"Error getting corp info: {type(e).__name__}: {e}")
             corp_info = None
 
-    return corp_info
+    return short_lists, corp_info
 
 
 async def sec_search(company_name,ticker):
