@@ -430,7 +430,9 @@ async def sec_get_report(query: str, report_type: str, sources: list) -> tuple[s
     # COMMENTED OUT: StreamlitLogHandler for streaming logs
     # logs_handler = StreamlitLogHandler(logs_container, report_container)
 
+
     query= query + f"-Add these SEC filings references from source url '{sources}' as well in references"
+
     # MODIFIED: Removed websocket parameter (streaming handler)
     researcher = GPTResearcher(query=query, report_type=report_type, source_urls=sources, complement_source_urls=False,
                                config_path="config.json")
@@ -515,6 +517,7 @@ async def dart_search(corp_code, temp_dir):
 
 
 table_format="""
+
 | **Business #**         | {BusinessNumber}            | **Corp Registration #**  | {CorpRegistrationNumber}    |
 |------------------------|-----------------------------|--------------------------|-----------------------------|
 | **CEO Name**           | {CEOName}                   | **Incorporation Date**   | {IncorporationDate}         |
@@ -558,7 +561,18 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
     """Generate DART report using GPTResearcher asynchronously."""
     # if not path: # Handle case where dart_search might have returned None
     #     return "Error: Document path not available for DART report generation.", [], ""
-
+    query= f"""
+            Use this tone for report generation : Simple/Factual tone
+            {query}
+            
+            For the first page of report add Table with this data {table_data} put the value and information of these after you generate the report and have their value
+            Table format should be like this: {table_format}
+            if you dont have any value for them then write "N/A" in table.
+            
+            Use Accurate and Authentic references with DART filings too.
+            
+            Generate in English language
+            """
     if path:
         query = f"""
                 Use this tone for report generation : Simple/Factual tone
@@ -574,11 +588,13 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
         researcher = GPTResearcher(query=query, report_type="research_report", report_source="hybrid",
                                    config_path="config_kr.json")
         researcher.cfg.load_config("config_kr.json")  # Or path to your config file
+
         await researcher.conduct_research()
         report = await researcher.write_report()
         research_images = []
         return report, research_images, ""
     else:
+
         query = f"""
                 Use this tone for report generation : Simple/Factual tone
                 {query} 
@@ -590,6 +606,7 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
                 """
         researcher = GPTResearcher(query=query, report_type="research_report",config_path="config_kr.json")
         researcher.cfg.load_config("config_kr.json")
+
         await researcher.conduct_research()
         report = await researcher.write_report()
         research_images = []
@@ -612,3 +629,8 @@ async def dart_get_report(query: str, report_source:str, path: str) -> tuple[str
 
     # MODIFIED: Return empty string for logs since streaming is disabled
     # return report, research_images, ""
+
+
+
+
+
