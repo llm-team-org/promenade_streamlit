@@ -369,7 +369,7 @@ async def short_list(company_name, company_first_name):
     corp_info = None
 
     try:
-        with open("/content/filtered_grouped_list.json", "r", encoding="utf-8") as f:
+        with open("filtered_grouped_list.json", "r", encoding="utf-8") as f:
             lis = json.load(f)
     except Exception as e:
         print(f"Error loading JSON file: {type(e).__name__}: {e}")
