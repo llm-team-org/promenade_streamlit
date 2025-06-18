@@ -396,7 +396,12 @@ async def generate_report_flow(company_url_input, selected_language):
                 with st.spinner("📝 Generating company short list for DART..."):
                     company_first_name_for_dart = first_name if first_name != 'N/A' else full_name.split(" ")[0]
                     # Using get_dart_company_information as per new script
-                    corp_short_list_data = await get_dart_company_information(full_name, company_first_name_for_dart)
+                    #corp_short_list_data = await get_dart_company_information(full_name, company_first_name_for_dart)
+                    corp_short_list_data = await short_list(full_name, company_first_name_for_dart)
+                    try:
+                        corp_code=corp_short_list_data['corp_code']
+                    except:
+                        corp_code=None
                     report_data['corp_short_list_data'] = corp_short_list_data
 
                 use_web_search = False
@@ -420,15 +425,16 @@ async def generate_report_flow(company_url_input, selected_language):
 
                     with st.spinner("🔢 Generating DART corporation code..."):
                         # generate_corp_code now takes company_url_input
-                        selected_corp_index_str = await generate_corp_code(full_name, corp_short_list_data, company_url_input)
+                        #selected_corp_index_str = await generate_corp_code(full_name, corp_short_list_data, company_url_input)
                         # st.write(selected_corp_index_str) # Original debug line
 
-                        if selected_corp_index_str != 'N/A' and selected_corp_index_str is not None:
+                        #if selected_corp_index_str != 'N/A' and selected_corp_index_str is not None:
+                        if corp_code:
                             try:
-                                selected_index = int(selected_corp_index_str)
-                                if 0 <= selected_index < len(corp_short_list_data):
-                                    corp_code_data_for_report = corp_short_list_data[selected_index]
-                                    report_data['corp_code_data'] = corp_code_data_for_report
+                                # selected_index = int(selected_corp_index_str)
+                                # if 0 <= selected_index < len(corp_short_list_data):
+                                #     corp_code_data_for_report = corp_short_list_data[selected_index]
+                                    report_data['corp_code_data'] = corp_code
                                     corp_code_value = corp_code_data_for_report.get('corp_code', 'N/A')
 
                                     with st.expander("View Company Information (DART)", expanded=False):
@@ -436,10 +442,10 @@ async def generate_report_flow(company_url_input, selected_language):
                                     with st.expander("View Corp Code (DART)", expanded=False):
                                         st.write(corp_code_value)
                                     st.success("✅ DART Corporation code processed.")
-                                else:
-                                    st.info("ℹ️ Invalid index for DART company. Using web search.")
-                                    use_web_search = True
-                                    web_search_reason = "corp code generation failed - invalid index"
+                                # else:
+                                #     st.info("ℹ️ Invalid index for DART company. Using web search.")
+                                #     use_web_search = True
+                                #     web_search_reason = "corp code generation failed - invalid index"
                             except ValueError:
                                 st.info("ℹ️ Corp code selection was not a valid number. Using web search.")
                                 use_web_search = True
@@ -1138,6 +1144,10 @@ async def generate_report_flow_async(company_url_input, selected_language):
         with st.spinner("📝 Generating company short list for DART..."):
             company_first_name_for_dart = first_name if first_name != 'N/A' else full_name.split(" ")[0]
             corp_short_list_data = await short_list(full_name, company_first_name_for_dart)
+            try:
+                corp_code=corp_short_list_data['corp_code']
+            except:
+                corp_code=None
             report_data['corp_short_list_data'] = corp_short_list_data
 
         if isinstance(corp_short_list_data, str) and "not in the dart list" in corp_short_list_data.lower():
@@ -1155,8 +1165,9 @@ async def generate_report_flow_async(company_url_input, selected_language):
         else:
             st.success("✅ Company found in DART short list.")
             with st.spinner("🔢 Generating DART corporation code..."):
-                corp_code_data = await generate_corp_code(full_name, corp_short_list_data)
-                report_data['corp_code_data'] = corp_code_data
+                # corp_code_data = await generate_corp_code(full_name, corp_short_list_data)
+                corp_code_data=corp_code
+                # report_data['corp_code_data'] = corp_code_data
 
             if not corp_code_data or "error" in corp_code_data or corp_code_data.get('corp_code') == 'N/A':
                 st.info("ℹ️ Could not find company data in DART. Using web search instead.")

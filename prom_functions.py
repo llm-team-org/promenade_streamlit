@@ -355,62 +355,65 @@ async def read_json_async(file_path):
 async def short_list(company_name, company_first_name):
     """
     Search for companies in a list that match either the full company name or first name.
-    Loads the company list from corp_list.json file.
+    Loads the company list from filtered_grouped_list.json file.
 
     Args:
         company_name (str): The full company name to search for
         company_first_name (str): The company's first name to search for if full name not found
 
     Returns:
-        list: Matching company objects or a string message if none found
+        tuple: (list of matching company objects, corp_info or None)
+               Returns (error_message, None) if error occurs
     """
-    # Initialize empty list to store matching companies
     short_lists = []
+    corp_info = None
 
-    # Load the company list from file with UTF-8 encoding
     try:
-        with open("corp_list.json", "r", encoding="utf-8") as f:
+        with open("/content/filtered_grouped_list.json", "r", encoding="utf-8") as f:
             lis = json.load(f)
-    # except UnicodeDecodeError:
-    #     # Try with a different encoding if UTF-8 fails
-    #     try:
-    #         with open("corp_list.json", "r", encoding="utf-8-sig") as f:
-    #             lis = json.load(f)
-    #     except Exception as e:
-    #         print(f"Error loading JSON file: {type(e).__name__}: {e}")
-    #         return "Error loading company list"
     except Exception as e:
         print(f"Error loading JSON file: {type(e).__name__}: {e}")
-        return "Error loading company list"
+        return "Error loading company list", None
 
-    # First try with the full company name
+    # First, search for exact company name matches
     for corp in lis:
         try:
-            # Convert the Corp object to a string
-            corp_str = str(corp)
-            # Check if company_name is in the string representation
-            if company_name in corp_str:
-                short_lists.append(corp)
+            if company_name == corp['group_name']:  # Exact match only
+                for entry in corp['entries']:
+                    short_lists.append({
+                        'name': entry['name'],
+                        'corp_code': entry['corp_code']
+                    })
         except Exception as e:
             print(f"Error processing item: {type(e).__name__}: {e}")
 
-    # If no matches were found with the full name, try with the first name
+    # If no exact matches found, search using company_first_name
     if len(short_lists) == 0:
         for corp in lis:
             try:
-                # Convert the Corp object to a string
-                corp_str = str(corp)
-                # Check if company_first_name is in the string representation
-                if company_first_name in corp_str:
-                    short_lists.append(corp)
+                if company_first_name == corp['group_name']:  # Exact match only
+                    for entry in corp['entries']:
+                        short_lists.append({
+                            'name': entry['name'],
+                            'corp_code': entry['corp_code']
+                        })
             except Exception as e:
                 print(f"Error processing item: {type(e).__name__}: {e}")
 
-    # If still empty after both searches, return message
+    # Check if any companies were found
     if len(short_lists) == 0:
-        return "This company is not in the dart list"
+        return "This company is not in the dart list", None
 
-    return short_lists
+    # Get corp_info if companies were found
+    # Fixed the condition: changed 'short_list' to 'short_lists'
+    if short_lists:
+        try:
+            corp_info = dart.api.filings.get_corp_info(corp_code=short_lists[0]['corp_code'])
+        except Exception as e:
+            print(f"Error getting corp info: {type(e).__name__}: {e}")
+            corp_info = None
+
+    return corp_info
 
 
 async def sec_search(company_name,ticker):
