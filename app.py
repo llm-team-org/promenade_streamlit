@@ -398,6 +398,8 @@ async def generate_report_flow(company_url_input, selected_language):
                     # Using get_dart_company_information as per new script
                     #corp_short_list_data = await get_dart_company_information(full_name, company_first_name_for_dart)
                     corp_short_list_data = await short_list(full_name, company_first_name_for_dart)
+                    with st.expander("Corp Data", expanded=False): st.write(corp_short_list_data)
+
                     try:
                         corp_code=corp_short_list_data['corp_code']
                     except:
