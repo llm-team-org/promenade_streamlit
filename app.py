@@ -277,16 +277,15 @@ async def generate_report_flow(company_url_input, selected_language):
         with st.spinner("🔍 Analyzing company information..."):
             # Assuming generate_company_information is an async function from prom_functions
             company_data = await generate_company_information(company_url_input, selected_language)
-            # The line `report = company_data` was present; unclear if intentional or a typo.
-            # Storing company_data in report_data seems correct.
             report_data['company_data'] = company_data
 
         if not company_data or (isinstance(company_data, dict) and "error" in company_data):
-            error_msg = company_data.get('error', 'Unknown error') if isinstance(company_data, dict) else "Invalid company data"
+            error_msg = company_data.get('error', 'Unknown error') if isinstance(company_data,
+                                                                                 dict) else "Invalid company data"
             st.error(f"❌ Failed to extract company information: {error_msg}")
             if isinstance(company_data, dict) and "raw_content" in company_data:
                 st.expander("Raw LLM Output").write(company_data["raw_content"])
-            return # Stop further processing
+            return  # Stop further processing
 
         st.success("✅ Company information extracted successfully!")
 
@@ -339,21 +338,22 @@ async def generate_report_flow(company_url_input, selected_language):
         11.Investment Considerations
         12.Conclusion
         13.References (Filings Annual Report, Accurate and Authentic)
-        
+
         -Add Tables: Display structured data like numbers, dates, comparisons, or lists in a table with headers, then summarize its main takeaways. For other content, use bullet points or numbered lists.
 
         -(Please exclude SWOT analysis)
         """
         st.markdown("---")
-        report_content = "" # Renamed from 'report' to avoid conflict with company_data assignment earlier if it was a typo
+        report_content = ""
         images = []
-        corp_code_value = 'N/A' # Initialize for DART
+        corp_code_value = 'N/A'  # Initialize for DART
+        corp_code_data_for_report = {}  # Initialize
 
         if selected_language.lower() == "english":
             st.subheader("🇺🇸 SEC Filing Analysis")
             try:
                 with st.spinner("📄 Searching SEC filings..."):
-                    ticker = company_data.get('ticker', 'N/A') # Ensure ticker is available
+                    ticker = company_data.get('ticker', 'N/A')
                     filings_data = await sec_search(full_name, ticker)
                     report_data['filings_data'] = filings_data
 
@@ -369,10 +369,10 @@ async def generate_report_flow(company_url_input, selected_language):
 
                 try:
                     with st.spinner("📊 Generating comprehensive IM report..."):
-                        report_content, images, _ = await sec_get_report( # Assuming logs are not needed here
+                        report_content, images, _ = await sec_get_report(
                             query=query_template,
                             report_type="research_report",
-                            sources=urls # Using all URLs as per new code
+                            sources=urls
                         )
                     report_data['report'] = report_content
                     report_data['images'] = images
@@ -381,27 +381,39 @@ async def generate_report_flow(company_url_input, selected_language):
                     st.error(f"❌ Error generating report: {str(sec_error)}")
                     st.expander("Error Details").write(f"Full error: {write_multiline_text(traceback.format_exc())}")
                     return
-                    report_data['report'] = f"Error generating report: {str(sec_error)}"
+
             except Exception as filing_error:
                 st.error(f"❌ Error in SEC filing process: {str(filing_error)}")
                 st.expander("Error Details").write(f"Full error: {write_multiline_text(traceback.format_exc())}")
                 return
-                report_data['report'] = f"Error in SEC filing process: {str(filing_error)}"
-
 
         elif selected_language.lower() == "korean":
             st.subheader("🇰🇷 DART Filing Analysis")
-            corp_code_data_for_report = {} # Initialize
             try:
                 with st.spinner("📝 Generating company short list for DART..."):
                     company_first_name_for_dart = first_name if first_name != 'N/A' else full_name.split(" ")[0]
-                    # Using get_dart_company_information as per new script
-                    corp_short_list_data = await get_dart_company_information(full_name, company_first_name_for_dart)
+                    # Using short_list function which returns (short_list_data, corp_info)
+                    corp_short_list_data, corp_info = await short_list(full_name, company_first_name_for_dart)
                     report_data['corp_short_list_data'] = corp_short_list_data
+
+                # Extract corp_code from corp_info
+                corp_code = None
+                if corp_info and isinstance(corp_info, dict):
+                    corp_code = corp_info.get('corp_code')
+                    if corp_code:
+                        corp_code_value = corp_code  # Update the display variable
+                        corp_code_data_for_report = corp_info  # Store the full corp_info
+                        report_data['corp_code_data'] = corp_info
+                        st.success(f"✅ Company code found: {corp_code}")
+                    else:
+                        st.info("ℹ️ Corp code not found in corp_info")
+                else:
+                    st.info("ℹ️ Corp info not available")
 
                 use_web_search = False
                 web_search_reason = ""
 
+                # Check if we should use web search
                 if isinstance(corp_short_list_data, str) and "not in the dart list" in corp_short_list_data.lower():
                     st.info("ℹ️ Company not in DART list. Using web search instead.")
                     use_web_search = True
@@ -414,51 +426,32 @@ async def generate_report_flow(company_url_input, selected_language):
                     st.info("ℹ️ Company in DART list but not found in short DART list. Using web search instead.")
                     use_web_search = True
                     web_search_reason = "not in short dart list"
-                else: # Company found in DART short list (corp_short_list_data is likely a list of dicts)
-                    st.success("✅ Company found in DART short list.")
-                    with st.expander("View Short List", expanded=False): st.write(corp_short_list_data)
+                elif not corp_code:  # No corp_code found
+                    st.info(
+                        "ℹ️ Company found in DART short list but corp_code not available. Using web search instead.")
+                    use_web_search = True
+                    web_search_reason = "corp code not available"
+                else:
+                    # Company found in DART short list and corp_code is available
+                    st.success("✅ Company found in DART short list with corp_code.")
+                    with st.expander("View Short List", expanded=False):
+                        st.write(corp_short_list_data)
+                    with st.expander("View Corp Info", expanded=False):
+                        st.write(corp_info)
 
-                    with st.spinner("🔢 Generating DART corporation code..."):
-                        # generate_corp_code now takes company_url_input
-                        selected_corp_index_str = await generate_corp_code(full_name, corp_short_list_data, company_url_input)
-                        # st.write(selected_corp_index_str) # Original debug line
-
-                        if selected_corp_index_str != 'N/A' and selected_corp_index_str is not None:
-                            try:
-                                selected_index = int(selected_corp_index_str)
-                                if 0 <= selected_index < len(corp_short_list_data):
-                                    corp_code_data_for_report = corp_short_list_data[selected_index]
-                                    report_data['corp_code_data'] = corp_code_data_for_report
-                                    corp_code_value = corp_code_data_for_report.get('corp_code', 'N/A')
-
-                                    with st.expander("View Company Information (DART)", expanded=False):
-                                        st.write(corp_code_data_for_report)
-                                    with st.expander("View Corp Code (DART)", expanded=False):
-                                        st.write(corp_code_value)
-                                    st.success("✅ DART Corporation code processed.")
-                                else:
-                                    st.info("ℹ️ Invalid index for DART company. Using web search.")
-                                    use_web_search = True
-                                    web_search_reason = "corp code generation failed - invalid index"
-                            except ValueError:
-                                st.info("ℹ️ Corp code selection was not a valid number. Using web search.")
-                                use_web_search = True
-                                web_search_reason = "corp code generation failed - non-integer index"
-                        else: # generate_corp_code returned 'N/A' or None
-                             st.info("ℹ️ Could not determine company data in DART. Using web search instead.")
-                             if isinstance(corp_code_data_for_report, dict) and "raw_content" in corp_code_data_for_report: # Check if corp_code_data_for_report got any raw_content
-                                 st.expander("Raw LLM Output").write(corp_code_data_for_report["raw_content"])
-                             use_web_search = True
-                             web_search_reason = "corp code generation failed - N/A"
-
-                # Display metrics for Korean company after attempting corp_code generation
+                # Display metrics for Korean company
                 st.markdown("### 📊 Company Metrics (DART)")
                 col1_k, col2_k, col3_k = st.columns(3)
-                with col1_k: st.metric("Company Name", full_name)
-                with col2_k: st.metric("First Name", first_name)
-                with col3_k: st.metric("Corp Code", corp_code_value) # Shows N/A if not found
+                with col1_k:
+                    st.metric("Company Name", full_name)
+                with col2_k:
+                    st.metric("First Name", first_name)
+                with col3_k:
+                    st.metric("Corp Code", corp_code_value)
 
+                # Generate report based on available data
                 if use_web_search:
+                    # Use web search for report generation
                     report_source = 'web'
                     report_data['report_source'] = report_source
                     report_data['web_search_reason'] = web_search_reason
@@ -472,10 +465,12 @@ async def generate_report_flow(company_url_input, selected_language):
                         st.success("✅ Report generated using web search!")
                     except Exception as dart_web_error:
                         st.error(f"❌ Error generating DART report (web search): {str(dart_web_error)}")
-                        st.expander("Error Details").write(f"Full error: {write_multiline_text(traceback.format_exc())}")
+                        st.expander("Error Details").write(
+                            f"Full error: {write_multiline_text(traceback.format_exc())}")
                         return
-                        report_data['report'] = f"Error generating report (web): {str(dart_web_error)}"
-                elif corp_code_value != 'N/A': # Proceed with DART documents only if corp_code was found
+
+                else:
+                    # We have corp_code, proceed with DART documents
                     st.info("✅ Company found in DART. Proceeding with DART filing download and report generation.")
                     with tempfile.TemporaryDirectory() as temp_dir:
                         try:
@@ -484,51 +479,25 @@ async def generate_report_flow(company_url_input, selected_language):
 
                             if not doc_path:
                                 st.info("❌ Company data is not available in DART documents. Using web sources instead.")
-                                report_source = 'web' # Fallback to web
+                                report_source = 'web'
                                 report_data['report_source'] = report_source
-                                # Regenerate report with web source if docs not found
+                                report_data['web_search_reason'] = "no dart documents found"
                                 with st.spinner("📊 Generating IM report using web search (fallback)..."):
-                                     report_content, images, _ = await dart_get_report(
+                                    report_content, images, _ = await dart_get_report(
                                         query=query_template, report_source='web', path=None)
-                                     report_data['report'] = report_content
-                                     report_data['images'] = images
-                                     st.success("✅ Report generated using web search (fallback from no DART docs)!")
+                                    report_data['report'] = report_content
+                                    report_data['images'] = images
+                                    st.success("✅ Report generated using web search (fallback from no DART docs)!")
 
-                            else: # Documents found
+                            else:
+                                # Documents found, use hybrid approach
                                 report_source = 'hybrid'
                                 report_data['report_source'] = report_source
-                                #st.success(f"✅ DART documents Saved. Path: {doc_path}")
-                                #with st.expander("View Document", expanded=False): st.write(doc_path)
 
                                 display_doc_path = os.path.relpath(doc_path, temp_dir)
                                 st.success(f"✅ DART documents processed. Path: {display_doc_path}")
-
-                                #dart_references_files=os.listdir(doc_path)
-                                #st.success(f"✅ DART documents processed. Files: {dart_references_files}")
-
-                                with st.expander("View Document Path", expanded=False): st.write(display_doc_path)
-                                #with st.expander("View download files", expanded=False):
-                                    #st.write(dart_references_files)
-                                    # for file in dart_references_files:
-                                    #     if file.endswith('.txt'):
-                                    #         file_path = os.path.join(doc_path, file)
-                                    #
-                                    #         col1, col2 = st.columns([3, 1])
-                                    #
-                                    #         with col1:
-                                    #             st.write(f"📄 {file}")
-                                    #
-                                    #         with col2:
-                                    #             with open(file_path, 'r', encoding='utf-8') as f:
-                                    #                 file_content = f.read()
-                                    #
-                                    #             st.download_button(
-                                    #                 label="⬇️",
-                                    #                 data=file_content,
-                                    #                 file_name=file,
-                                    #                 mime='text/plain',
-                                    #                 key=f"download_{file}"  # Unique key for each button
-                                    #             )
+                                with st.expander("View Document Path", expanded=False):
+                                    st.write(display_doc_path)
 
                                 with st.spinner("📊 Generating comprehensive IM report from DART docs..."):
                                     report_content, images, _ = await dart_get_report(
@@ -540,46 +509,41 @@ async def generate_report_flow(company_url_input, selected_language):
 
                         except Exception as dart_filing_error:
                             st.error(f"❌ Error generating report from DART filings: {str(dart_filing_error)}")
-                            st.expander("Error Details").write(f"Full error: \n{write_multiline_text(traceback.format_exc())}")
+                            st.expander("Error Details").write(
+                                f"Full error: \n{write_multiline_text(traceback.format_exc())}")
                             return
-                            report_data['report'] = f"Error generating report (DART filings): {str(dart_filing_error)}"
-                else: # Not using web search but corp_code_value is N/A - this case should be handled by web_search_reason
-                    st.warning("ℹ️ Could not proceed with DART document search as Corp Code was not identified.")
-                    report_data['report'] = "Could not obtain DART Corp Code for document search."
-
 
             except Exception as dart_general_error:
                 st.error(f"❌ Error in DART filing process: {str(dart_general_error)}")
                 st.expander("Error Details").write(f"Full error: {write_multiline_text(traceback.format_exc())}")
                 return
-                report_data['report'] = f"Error in DART filing process: {str(dart_general_error)}"
 
+        # Update session state
         st.session_state.report_to_display = report_data
-        if not any(existing_report['url'] == report_data['url'] and existing_report['language'] == report_data['language'] for existing_report in st.session_state.report_list):
+        if not any(
+                existing_report['url'] == report_data['url'] and existing_report['language'] == report_data['language']
+                for existing_report in st.session_state.report_list):
             st.session_state.report_list.append(report_data)
         st.rerun()
 
-        # This image display seems redundant if display_report is called immediately after.
-        # However, if generate_report_flow is meant to update the main area directly:
+        # Display images if available
         if images:
             st.subheader("🖼️ Report Images (from generation)")
             for i, image_data in enumerate(images):
                 st.image(image_data, caption=f"Report Image {i + 1}")
-        # Calling display_report here if this function is responsible for the final main page update
-        # display_report(report_data) # Or rely on the main script logic to call display_report
-
 
     except Exception as general_error:
         st.error(f"❌ Unexpected error in report generation flow: {str(general_error)}")
         st.expander("Error Details").write(f"Full error: {write_multiline_text(traceback.format_exc())}")
-        return
         # Ensure report_data has some error message if an overarching error occurs
-        if 'report' not in report_data or not report_data['report'] :
-             report_data['report'] = f"Unexpected error in report generation: {str(general_error)}"
-        st.session_state.report_to_display = report_data # Display error info
-        # Optionally add to list for review
-        if not any(existing_report['url'] == report_data['url'] and existing_report['language'] == report_data['language'] for existing_report in st.session_state.report_list):
+        if 'report' not in report_data or not report_data['report']:
+            report_data['report'] = f"Unexpected error in report generation: {str(general_error)}"
+        st.session_state.report_to_display = report_data
+        if not any(
+                existing_report['url'] == report_data['url'] and existing_report['language'] == report_data['language']
+                for existing_report in st.session_state.report_list):
             st.session_state.report_list.append(report_data)
+        return
 
 def display_report_details(report_data):
     """Displays the comprehensive report details in the main content area."""

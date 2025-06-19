@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import aiofiles  # Added for async file operations
-
+import aiohttp
 from openai import AsyncOpenAI  # Changed to AsyncOpenAI
 from tavily import AsyncTavilyClient
 from sec_api import FullTextSearchApi
@@ -22,7 +22,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 SEC_API_KEY = os.getenv("SEC_API_KEY")
 DART_API_KEY = os.getenv("DART_API_KEY")
-
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 
 # COMMENTED OUT: StreamlitLogHandler class for streaming logs
 # class StreamlitLogHandler:
@@ -92,45 +92,91 @@ DART_API_KEY = os.getenv("DART_API_KEY")
 #                     self.logs_container.warning(error_message)
 
 
-async def tavily_web_search(url, num_results=5):
-    """Perform a web search using Tavily API and return relevant information asynchronously."""
-    client = AsyncTavilyClient(api_key=TAVILY_API_KEY)
-    search_query = "Information about " + url + " and Top competitors of " + url + "with its Ticker"
-    response = client.extract(urls=url)
-    search_response = await client.search(
-        query=search_query,
-        search_depth="advanced",
-        include_domains=[],
-        exclude_domains=[],
-        max_results=num_results,
-        include_answer=True,
-        include_raw_content=True,
-        include_images=False
-    )
+async def search_serper(user_url):
+    url = "https://google.serper.dev/search"
+    query = f"Information about {user_url} and Top competitors of {user_url} with its Ticker"
 
-    search_results = []
-    if "results" in response:
-        for result in response["results"]:
-            search_results.append({
-                "Company_Information": result.get("raw_content","No description found")
-            })
-    if "results" in search_response:
-        for result in search_response["results"]:
-            search_results.append({
-                "Title": result.get("title", ""),
-                "Link": result.get("url", ""),
-                "Snippet": result.get("content", "No description found"),
-                "Content": result.get("raw_content", ""),
-                "Score": result.get("score", "")
-            })
-    return search_results
+    payload = {
+        "q": query,
+        "hl": "en",
+        "num": 10,
+        "page": 1
+    }
+
+    headers = {
+        'X-API-KEY': SERPER_API_KEY,
+        'Content-Type': 'application/json'
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as response:
+                # Check if request was successful
+                response.raise_for_status()
+
+                # Parse JSON response
+                data = await response.json()
+                results = []
+
+                # Extract organic results
+                for result in data.get("organic", []):
+                    results.append({
+                        "title": result.get("title"),
+                        "link": result.get("link"),
+                        "snippet": result.get("snippet")
+                    })
+
+        return results
+
+    except aiohttp.ClientError as e:
+        print(f"HTTP error occurred: {e}")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"JSON decode error: {e}")
+        return []
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return []
+
+# async def tavily_web_search(url, num_results=5):
+#     """Perform a web search using Tavily API and return relevant information asynchronously."""
+#     client = AsyncTavilyClient(api_key=TAVILY_API_KEY)
+#     search_query = "Information about " + url + " and Top competitors of " + url + "with its Ticker"
+#     response = client.extract(urls=url)
+#     search_response = await client.search(
+#         query=search_query,
+#         search_depth="advanced",
+#         include_domains=[],
+#         exclude_domains=[],
+#         max_results=num_results,
+#         include_answer=True,
+#         include_raw_content=True,
+#         include_images=False
+#     )
+#
+#     search_results = []
+#     if "results" in response:
+#         for result in response["results"]:
+#             search_results.append({
+#                 "Company_Information": result.get("raw_content","No description found")
+#             })
+#     if "results" in search_response:
+#         for result in search_response["results"]:
+#             search_results.append({
+#                 "Title": result.get("title", ""),
+#                 "Link": result.get("url", ""),
+#                 "Snippet": result.get("content", "No description found"),
+#                 "Content": result.get("raw_content", ""),
+#                 "Score": result.get("score", "")
+#             })
+#     return search_results
 
 
 tools = [{
     "type": "function",
     "function": {
-        "name": "tavily_web_search",  # This should match the async function name if used directly by OpenAI model
-        "description": "Get information about the user prompt using Tavily web search",
+        "name": "search_serper",  # This should match the async function name if used directly by OpenAI model
+        "description": "Get information about the user prompt using Serper web search",
         "parameters": {
             "type": "object",
             "properties": {
@@ -176,7 +222,7 @@ async def generate_company_information(url, language):
 
     # Initial call to determine if a tool (web search) is needed
     response = await client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4.1-mini",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Give me information about this company {url}"}
@@ -213,12 +259,12 @@ async def generate_company_information(url, language):
                 continue  # Move to the next tool call
 
             tool_output = None
-            if function_name == "tavily_web_search":
+            if function_name == "search_serper":
                 try:
                     # Use .get for safety, prefer "query"
                     query = arguments.get("query", arguments.get("prompt"))
                     if query:
-                        tool_output = await tavily_web_search(query=query)
+                        tool_output = await search_serper(query)
                     else:
                         tool_output = {"error": f"Missing 'query' argument for {function_name}."}
                 except Exception as e:
@@ -237,7 +283,7 @@ async def generate_company_information(url, language):
 
         # Send the full history including tool responses back to the model
         followup = await client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4.1",
             messages=messages_history,  # Use the constructed history
             temperature=0.4,
             response_format={"type": "json_object"}
@@ -350,62 +396,66 @@ async def read_json_async(file_path):
 async def short_list(company_name, company_first_name):
     """
     Search for companies in a list that match either the full company name or first name.
-    Loads the company list from corp_list.json file.
+    Loads the company list from filtered_grouped_list.json file.
 
     Args:
         company_name (str): The full company name to search for
         company_first_name (str): The company's first name to search for if full name not found
 
     Returns:
-        list: Matching company objects or a string message if none found
+        tuple: (list of matching company objects, corp_info or None)
+               Returns (error_message, None) if error occurs
     """
-    # Initialize empty list to store matching companies
     short_lists = []
+    corp_info = None
 
-    # Load the company list from file with UTF-8 encoding
     try:
-        with open("corp_list.json", "r", encoding="utf-8") as f:
+        with open("filtered_grouped_list.json", "r", encoding="utf-8") as f:
             lis = json.load(f)
-    # except UnicodeDecodeError:
-    #     # Try with a different encoding if UTF-8 fails
-    #     try:
-    #         with open("corp_list.json", "r", encoding="utf-8-sig") as f:
-    #             lis = json.load(f)
-    #     except Exception as e:
-    #         print(f"Error loading JSON file: {type(e).__name__}: {e}")
-    #         return "Error loading company list"
     except Exception as e:
         print(f"Error loading JSON file: {type(e).__name__}: {e}")
-        return "Error loading company list"
+        return "Error loading company list", None
 
-    # First try with the full company name
+    # First, search for exact company name matches
     for corp in lis:
         try:
-            # Convert the Corp object to a string
-            corp_str = str(corp)
-            # Check if company_name is in the string representation
-            if company_name in corp_str:
-                short_lists.append(corp)
+            if company_name == corp['group_name']:  # Exact match only
+                for entry in corp['entries']:
+                    short_lists.append({
+                        'name': entry['name'],
+                        'corp_code': entry['corp_code']
+                    })
         except Exception as e:
             print(f"Error processing item: {type(e).__name__}: {e}")
 
-    # If no matches were found with the full name, try with the first name
+    # If no exact matches found, search using company_first_name
     if len(short_lists) == 0:
         for corp in lis:
             try:
-                # Convert the Corp object to a string
-                corp_str = str(corp)
-                # Check if company_first_name is in the string representation
-                if company_first_name in corp_str:
-                    short_lists.append(corp)
+                if company_first_name == corp['group_name']:  # Exact match only
+                    for entry in corp['entries']:
+                        short_lists.append({
+                            'name': entry['name'],
+                            'corp_code': entry['corp_code']
+                        })
             except Exception as e:
                 print(f"Error processing item: {type(e).__name__}: {e}")
 
-    # If still empty after both searches, return message
+    # Check if any companies were found
     if len(short_lists) == 0:
-        return "This company is not in the dart list"
+        return "This company is not in the dart list", None
 
-    return short_lists
+    # Get corp_info if companies were found
+    # Fixed the condition: changed 'short_list' to 'short_lists'
+    if short_lists:
+        try:
+            dart.set_api_key(api_key=DART_API_KEY)
+            corp_info = dart.api.filings.get_corp_info(corp_code=short_lists[0]['corp_code'])
+        except Exception as e:
+            print(f"Error getting corp info: {type(e).__name__}: {e}")
+            corp_info = None
+
+    return short_lists, corp_info
 
 
 async def sec_search(company_name,ticker):
