@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import aiofiles  # Added for async file operations
-
+import aiohttp
 from openai import AsyncOpenAI  # Changed to AsyncOpenAI
 from tavily import AsyncTavilyClient
 from sec_api import FullTextSearchApi
@@ -27,7 +27,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 SEC_API_KEY = os.getenv("SEC_API_KEY")
 DART_API_KEY = os.getenv("DART_API_KEY")
-
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 
 # COMMENTED OUT: StreamlitLogHandler class for streaming logs
 # class StreamlitLogHandler:
@@ -97,45 +97,91 @@ DART_API_KEY = os.getenv("DART_API_KEY")
 #                     self.logs_container.warning(error_message)
 
 
-async def tavily_web_search(url, num_results=5):
-    """Perform a web search using Tavily API and return relevant information asynchronously."""
-    client = AsyncTavilyClient(api_key=TAVILY_API_KEY)
-    search_query = "Information about " + url + " and Top competitors of " + url + "with its Ticker"
-    response = client.extract(urls=url)
-    search_response = await client.search(
-        query=search_query,
-        search_depth="advanced",
-        include_domains=[],
-        exclude_domains=[],
-        max_results=num_results,
-        include_answer=True,
-        include_raw_content=True,
-        include_images=False
-    )
+async def search_serper(user_url):
+    url = "https://google.serper.dev/search"
+    query = f"Information about {user_url} and Top competitors of {user_url} with its Ticker"
 
-    search_results = []
-    if "results" in response:
-        for result in response["results"]:
-            search_results.append({
-                "Company_Information": result.get("raw_content","No description found")
-            })
-    if "results" in search_response:
-        for result in search_response["results"]:
-            search_results.append({
-                "Title": result.get("title", ""),
-                "Link": result.get("url", ""),
-                "Snippet": result.get("content", "No description found"),
-                "Content": result.get("raw_content", ""),
-                "Score": result.get("score", "")
-            })
-    return search_results
+    payload = {
+        "q": query,
+        "hl": "en",
+        "num": 10,
+        "page": 1
+    }
+
+    headers = {
+        'X-API-KEY': SERPER_API_KEY,
+        'Content-Type': 'application/json'
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as response:
+                # Check if request was successful
+                response.raise_for_status()
+
+                # Parse JSON response
+                data = await response.json()
+                results = []
+
+                # Extract organic results
+                for result in data.get("organic", []):
+                    results.append({
+                        "title": result.get("title"),
+                        "link": result.get("link"),
+                        "snippet": result.get("snippet")
+                    })
+
+        return results
+
+    except aiohttp.ClientError as e:
+        print(f"HTTP error occurred: {e}")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"JSON decode error: {e}")
+        return []
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return []
+
+# async def tavily_web_search(url, num_results=5):
+#     """Perform a web search using Tavily API and return relevant information asynchronously."""
+#     client = AsyncTavilyClient(api_key=TAVILY_API_KEY)
+#     search_query = "Information about " + url + " and Top competitors of " + url + "with its Ticker"
+#     response = client.extract(urls=url)
+#     search_response = await client.search(
+#         query=search_query,
+#         search_depth="advanced",
+#         include_domains=[],
+#         exclude_domains=[],
+#         max_results=num_results,
+#         include_answer=True,
+#         include_raw_content=True,
+#         include_images=False
+#     )
+#
+#     search_results = []
+#     if "results" in response:
+#         for result in response["results"]:
+#             search_results.append({
+#                 "Company_Information": result.get("raw_content","No description found")
+#             })
+#     if "results" in search_response:
+#         for result in search_response["results"]:
+#             search_results.append({
+#                 "Title": result.get("title", ""),
+#                 "Link": result.get("url", ""),
+#                 "Snippet": result.get("content", "No description found"),
+#                 "Content": result.get("raw_content", ""),
+#                 "Score": result.get("score", "")
+#             })
+#     return search_results
 
 
 tools = [{
     "type": "function",
     "function": {
-        "name": "tavily_web_search",  # This should match the async function name if used directly by OpenAI model
-        "description": "Get information about the user prompt using Tavily web search",
+        "name": "search_serper",  # This should match the async function name if used directly by OpenAI model
+        "description": "Get information about the user prompt using Serper web search",
         "parameters": {
             "type": "object",
             "properties": {
@@ -181,7 +227,7 @@ async def generate_company_information(url, language):
 
     # Initial call to determine if a tool (web search) is needed
     response = await client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4.1-mini",
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Give me information about this company {url}"}
@@ -218,12 +264,12 @@ async def generate_company_information(url, language):
                 continue  # Move to the next tool call
 
             tool_output = None
-            if function_name == "tavily_web_search":
+            if function_name == "search_serper":
                 try:
                     # Use .get for safety, prefer "query"
                     query = arguments.get("query", arguments.get("prompt"))
                     if query:
-                        tool_output = await tavily_web_search(query=query)
+                        tool_output = await search_serper(query)
                     else:
                         tool_output = {"error": f"Missing 'query' argument for {function_name}."}
                 except Exception as e:
@@ -242,7 +288,7 @@ async def generate_company_information(url, language):
 
         # Send the full history including tool responses back to the model
         followup = await client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4.1",
             messages=messages_history,  # Use the constructed history
             temperature=0.4,
             response_format={"type": "json_object"}
